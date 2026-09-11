@@ -1302,7 +1302,7 @@ function showAuthError(msg){
 
 async function handleAuthSubmit(){
   const email = document.getElementById('authEmail').value.trim();
-  const password = document.getElementById('authPassword').value;
+  const password = document.getElementById('authPassword').value.trim();
   document.getElementById('authError').style.display = 'none';
   if(!email || !password){ showAuthError('Enter your email and password'); return; }
 
