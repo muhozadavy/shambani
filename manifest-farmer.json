@@ -1,6 +1,6 @@
 {
-  "name": "Shambani for Farmers",
-  "short_name": "Shambani",
+  "name": "Shambani Farmer",
+  "short_name": "Shamba Farmer",
   "description": "List your harvest, respond to buying requests, and manage deals with wholesale buyers.",
   "start_url": "/farmer-app.html",
   "scope": "/farmer-app.html",
@@ -10,8 +10,8 @@
   "background_color": "#FAFAF7",
   "theme_color": "#FFC244",
   "icons": [
-    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    { "src": "/icons/farmer/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/farmer/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/farmer/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ]
 }
