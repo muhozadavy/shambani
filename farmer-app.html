@@ -70,6 +70,23 @@
   .screen.active{ display:flex; }
   @keyframes fadeIn{ from{opacity:0} to{opacity:1} }
 
+  /* ---------- Loading / spinner ---------- */
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+  .spinner-ring{
+    width:34px; height:34px; border-radius:50%;
+    border:3px solid rgba(26,26,26,.1); border-top-color:var(--ink);
+    animation:spin .7s linear infinite;
+  }
+  #screen-splash{ align-items:center; justify-content:center; }
+  #screen-splash .brand-mark{ margin:0 auto 22px; }
+  #screen-splash .spinner-ring{ margin:0 auto; }
+  .loading-state{
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    padding:48px 20px; color:var(--slate); gap:14px;
+  }
+  .loading-state .spinner-ring{ width:26px; height:26px; border-width:2.5px; }
+  .loading-state span{ font-size:13px; font-weight:600; }
+
   /* Only the body scrolls now — headers and nav bars stay put like a real app. */
   .screen-body{
     flex:1; min-height:0;
@@ -352,8 +369,20 @@
 
 <div class="app-frame" id="appFrame">
 
+  <!-- ================= SPLASH / LOADING ================= -->
+  <div class="screen active" id="screen-splash">
+    <div class="brand-mark">
+      <svg class="icon" style="width:26px;height:26px" viewBox="0 0 24 24" fill="none">
+        <path d="M12 20V11" stroke="#1A1A1A" stroke-width="2" stroke-linecap="round"/>
+        <path d="M12 14c0-4.5-4-7-9-6 1 4.5 4.5 7 9 6z" fill="#1A1A1A"/>
+        <path d="M12 11c0-4.5 4.5-7 9-6-1 4.5-4.5 7-9 6z" fill="#1A1A1A"/>
+      </svg>
+    </div>
+    <div class="spinner-ring"></div>
+  </div>
+
   <!-- ================= LOGIN ================= -->
-  <div class="screen active" id="screen-login">
+  <div class="screen" id="screen-login">
     <div class="login-hero">
       <svg viewBox="0 0 400 190" preserveAspectRatio="xMidYMax slice" xmlns="http://www.w3.org/2000/svg">
         <defs>
@@ -1189,10 +1218,22 @@ async function goToScreen(id){
   document.getElementById(id).classList.add('active');
   document.getElementById(id).scrollTop = 0;
   state.currentScreen = id;
-  if(id === 'screen-home'){ await loadListings(); await loadBuyingRequests(); renderHome(); }
-  if(id === 'screen-listings'){ await loadListings(); renderListings(); }
+  if(id === 'screen-home'){
+    if(!state.listings.length && !state.buyingRequests.length){
+      document.getElementById('homeListingsWrap').innerHTML = loadingStateHtml();
+      document.getElementById('homeRequestsWrap').innerHTML = loadingStateHtml();
+    }
+    await loadListings(); await loadBuyingRequests(); renderHome();
+  }
+  if(id === 'screen-listings'){
+    if(!state.listings.length) document.getElementById('allListingsWrap').innerHTML = loadingStateHtml();
+    await loadListings(); renderListings();
+  }
   if(id === 'screen-profile') renderProfile();
-  if(id === 'screen-requests'){ await loadBuyingRequests(); renderRequests(); }
+  if(id === 'screen-requests'){
+    if(!state.buyingRequests.length) document.getElementById('allRequestsWrap').innerHTML = loadingStateHtml();
+    await loadBuyingRequests(); renderRequests();
+  }
   if(id === 'screen-edit-profile'){ populateEditForm(); setTimeout(() => initLocationPicker('edLocationMap', 'edLocateStatus', state.farmer.latitude, state.farmer.longitude, (lat,lng) => { state.farmer.latitude = lat; state.farmer.longitude = lng; }), 50); }
   if(id === 'screen-ob2'){ setTimeout(() => initLocationPicker('obLocationMap', 'obLocateStatus', state.farmer.latitude, state.farmer.longitude, (lat,lng) => { state.farmer.latitude = lat; state.farmer.longitude = lng; }), 50); }
   setActiveNav(id);
@@ -1590,6 +1631,8 @@ async function checkSessionOnLoad(){
   const { data: { session } } = await sb.auth.getSession();
   if(session){
     await loadFarmerAndEnter();
+  } else {
+    goToScreen('screen-login');
   }
 }
 
@@ -1790,6 +1833,10 @@ function listingCardHtml(l){
       <div class="price">TZS ${Number(l.price).toLocaleString()} / ${l.priceUnit}</div>
     </div>
   </div>`;
+}
+
+function loadingStateHtml(){
+  return `<div class="loading-state"><div class="spinner-ring"></div><span>Loading…</span></div>`;
 }
 
 function emptyStateHtml(){
