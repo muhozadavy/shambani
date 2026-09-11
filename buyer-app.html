@@ -32,31 +32,22 @@
     color:var(--ink);
     display:flex;
     justify-content:center;
-    align-items:center;
+    align-items:stretch;
     min-height:100vh;
-    background:
-      radial-gradient(circle at 15% 10%, rgba(255,194,68,.22) 0%, transparent 45%),
-      radial-gradient(circle at 85% 92%, rgba(46,125,70,.16) 0%, transparent 50%),
-      #F3EFE3;
+    background:var(--bg);
   }
   h1,h2,h3,.display{ font-family:'Poppins',system-ui,sans-serif; }
 
   .app-frame{
     width:100%;
-    max-width:412px;
+    max-width:480px;
     min-height:100vh;
     background:var(--bg);
     position:relative;
-    overflow:hidden;
-    box-shadow:0 30px 80px rgba(0,0,0,.25);
   }
-  @media (min-width:480px){
-    body{ padding:40px 16px; }
-    .app-frame{
-      min-height:860px; height:860px; border-radius:36px;
-      border:1px solid rgba(26,26,26,.07);
-      box-shadow:0 40px 90px rgba(26,26,26,.16), 0 10px 30px rgba(26,26,26,.08);
-    }
+  @media (min-width:900px){
+    body{ background:#F3EFE3; }
+    .app-frame{ box-shadow:0 0 0 1px rgba(26,26,26,.06); }
   }
 
   .screen{
@@ -69,7 +60,6 @@
     scrollbar-width:none;
     animation:fadeIn .25s ease;
   }
-  @media (min-width:480px){ .screen{ min-height:860px; height:860px; } }
   .screen::-webkit-scrollbar{ display:none; }
   .screen.active{ display:flex; }
   @keyframes fadeIn{ from{opacity:0} to{opacity:1} }
