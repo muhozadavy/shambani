@@ -676,6 +676,7 @@
       </div>
       <div class="section-heading"><h3 id="rdOffersHeading">Farmer offers (3)</h3></div>
       <div id="rdOffersWrap"></div>
+      <button class="btn btn-ghost" style="margin-top:20px; color:var(--red); border-color:#F2D9D2;" onclick="confirmDeleteCurrentRequest()">Remove request</button>
     </div>
   </div>
 
@@ -1600,6 +1601,24 @@ function openRequestDetail(id){
     : emptyStateHtml('No offers yet', 'Farmers matching this request will respond soon.');
 
   goToScreen('screen-request-detail');
+}
+
+function confirmDeleteCurrentRequest(){
+  const r = state.myRequests.find(x => x.id === state.currentRequestId);
+  if(!r) return;
+  const msg = r.offers.length
+    ? `Remove this request? ${r.offers.length} farmer offer${r.offers.length === 1 ? '' : 's'} on it will also be removed.`
+    : 'Remove this request? Farmers will no longer see it.';
+  if(confirm(msg)) deleteCurrentRequest();
+}
+
+async function deleteCurrentRequest(){
+  const id = state.currentRequestId;
+  const { error } = await sb.from('buying_requests').delete().eq('id', id);
+  if(error){ showToast('Could not remove request: ' + error.message); return; }
+  state.myRequests = state.myRequests.filter(x => x.id !== id);
+  showToast('Request removed');
+  goToScreen('screen-requests');
 }
 
 async function acceptOffer(reqId, offerId){
