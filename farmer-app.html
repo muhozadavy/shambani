@@ -881,6 +881,19 @@
         <div class="stat-card"><div class="stat-num" id="pfTotalSold">0</div><div class="stat-label">Completed sales</div></div>
       </div>
 
+      <div class="card" id="pushNotifCard" style="padding:14px 16px; margin-bottom:16px; display:flex; align-items:center; justify-content:space-between; gap:12px; cursor:pointer;" onclick="enablePushNotifications()">
+        <div style="display:flex; align-items:center; gap:12px;">
+          <div style="width:36px;height:36px;border-radius:50%;background:var(--green-bg);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+            <svg class="icon" style="width:17px;height:17px" viewBox="0 0 24 24" fill="none"><path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9" stroke="#2E7D46" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M13.73 21a2 2 0 01-3.46 0" stroke="#2E7D46" stroke-width="1.6" stroke-linecap="round"/></svg>
+          </div>
+          <div>
+            <div style="font-weight:600; font-size:14px;">Push notifications</div>
+            <div class="hint" id="pushNotifStatus" style="margin-top:2px;">Tap to enable</div>
+          </div>
+        </div>
+        <svg class="icon" style="width:16px;height:16px;flex-shrink:0;" viewBox="0 0 24 24" fill="none"><path d="M9 18l6-6-6-6" stroke="#9A968A" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+
       <button class="btn btn-ghost" onclick="goToScreen('screen-edit-profile')">Edit farm data</button>
       <p style="text-align:center; margin-top:16px; font-size:13px; color:var(--red); font-weight:700; cursor:pointer;" onclick="handleLogout()">Log out</p>
     </div>
@@ -1345,6 +1358,94 @@ async function abandonSignup(){
   document.getElementById('authEmail').value = '';
   document.getElementById('authPassword').value = '';
   goToScreen('screen-login');
+}
+
+/* ===================== PUSH NOTIFICATIONS ===================== */
+const VAPID_PUBLIC_KEY = 'BKMG5sLSi0CkIb6tmcHFK0vMaKYCFSpHDk0R91MM4t19cWAGFFYmnqi1JK277enlg4TrqCwRN-MIrpnxLUCGz5g';
+
+function urlBase64ToUint8Array(base64String){
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for(let i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i);
+  return outputArray;
+}
+
+async function refreshPushNotifStatus(){
+  const statusEl = document.getElementById('pushNotifStatus');
+  if(!statusEl) return;
+  if(!('serviceWorker' in navigator) || !('PushManager' in window)){
+    statusEl.textContent = 'Not supported on this browser';
+    return;
+  }
+  try {
+    const reg = await navigator.serviceWorker.getRegistration();
+    const sub = reg ? await reg.pushManager.getSubscription() : null;
+    if(sub){
+      statusEl.textContent = 'Enabled';
+    } else if(Notification.permission === 'denied'){
+      statusEl.textContent = 'Blocked — enable in browser settings';
+    } else {
+      statusEl.textContent = 'Tap to enable';
+    }
+  } catch(e){
+    statusEl.textContent = 'Tap to enable';
+  }
+}
+
+async function enablePushNotifications(){
+  const statusEl = document.getElementById('pushNotifStatus');
+  if(!('serviceWorker' in navigator) || !('PushManager' in window)){
+    showToast('Push notifications are not supported on this browser');
+    return;
+  }
+
+  try {
+    const reg = await navigator.serviceWorker.getRegistration();
+    if(!reg){ showToast('Still setting up — try again in a moment'); return; }
+
+    let sub = await reg.pushManager.getSubscription();
+    if(sub){
+      showToast('Push notifications are already enabled');
+      refreshPushNotifStatus();
+      return;
+    }
+
+    if(statusEl) statusEl.textContent = 'Enabling…';
+
+    const permission = await Notification.requestPermission();
+    if(permission !== 'granted'){
+      if(statusEl) statusEl.textContent = permission === 'denied' ? 'Blocked — enable in browser settings' : 'Tap to enable';
+      showToast('Notification permission was not granted');
+      return;
+    }
+
+    sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+    });
+
+    const { data: { user } } = await sb.auth.getUser();
+    if(!user){ showToast('Please sign in again'); return; }
+
+    const subJson = sub.toJSON();
+    const { error } = await sb.from('push_subscriptions').upsert({
+      user_id: user.id,
+      endpoint: subJson.endpoint,
+      p256dh: subJson.keys.p256dh,
+      auth: subJson.keys.auth,
+      app: 'farmer',
+    }, { onConflict: 'endpoint' });
+
+    if(error){ showToast('Could not save subscription: ' + error.message); return; }
+
+    showToast('Push notifications enabled');
+    refreshPushNotifStatus();
+  } catch(e){
+    showToast('Could not enable push notifications');
+    refreshPushNotifStatus();
+  }
 }
 
 /* ===================== DATA MAPPING (DB row <-> app state) ===================== */
@@ -2186,6 +2287,7 @@ function renderProfile(){
   document.getElementById('pfCerts').textContent = f.certs.length ? f.certs.join(', ') : 'None yet';
   document.getElementById('pfTotalListed').textContent = state.listings.length;
   document.getElementById('pfTotalSold').textContent = state.listings.filter(l => l.status === 'Sold').length;
+  refreshPushNotifStatus();
 }
 
 /* ===================== EDIT PROFILE ===================== */
