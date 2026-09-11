@@ -485,7 +485,7 @@
       </div>
     </div>
     <div class="onboard-nav">
-      <button class="btn btn-ghost" onclick="goToScreen('screen-login')" style="max-width:56px;">
+      <button class="btn btn-ghost" onclick="abandonSignup()" style="max-width:56px;">
         <svg class="icon" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="#1A1A1A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </button>
       <button class="btn btn-primary" onclick="goToScreen('screen-ob2')">Continue</button>
@@ -1263,6 +1263,16 @@ async function handleLogout(){
   await sb.auth.signOut();
   teardownRealtime();
   state.buyer = { name:'', businessName:'', buyerType:'', region:'Arusha', district:'' };
+  document.getElementById('authEmail').value = '';
+  document.getElementById('authPassword').value = '';
+  goToScreen('screen-login');
+}
+
+// Leaving onboarding via the back button means abandoning this signup —
+// sign out so a page reload lands back on the login screen instead of
+// bouncing straight back into onboarding via the still-active session.
+async function abandonSignup(){
+  await sb.auth.signOut();
   document.getElementById('authEmail').value = '';
   document.getElementById('authPassword').value = '';
   goToScreen('screen-login');
