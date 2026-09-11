@@ -50,7 +50,8 @@
   .app-frame{
     width:100%;
     max-width:480px;
-    min-height:100vh;
+    height:100vh;
+    height:100dvh;
     background:var(--bg);
     position:relative;
   }
@@ -63,18 +64,26 @@
     display:none;
     flex-direction:column;
     height:100%;
-    min-height:100vh;
-    overflow-y:auto;
-    -ms-overflow-style:none;
-    scrollbar-width:none;
+    overflow:hidden;
     animation:fadeIn .25s ease;
   }
-  .screen::-webkit-scrollbar{ display:none; }
   .screen.active{ display:flex; }
   @keyframes fadeIn{ from{opacity:0} to{opacity:1} }
 
-  .screen-body{ flex:1; padding:20px 20px 100px 20px; }
+  /* Only the body scrolls now — headers and nav bars stay put like a real app. */
+  .screen-body{
+    flex:1; min-height:0;
+    overflow-y:auto;
+    -ms-overflow-style:none;
+    scrollbar-width:none;
+    -webkit-overflow-scrolling:touch;
+    padding:20px 20px 100px 20px;
+  }
+  .screen-body::-webkit-scrollbar{ display:none; }
   .screen-body.no-pad-bottom{ padding-bottom:24px; }
+
+  /* Fixed top/bottom chrome that sits above the scrolling body */
+  .top-header, .sub-header, .onboard-header, .login-hero, .filter-row{ flex-shrink:0; }
 
   /* ---------- Reusable bits ---------- */
   .top-header{
@@ -302,9 +311,14 @@
   .filter-pill{ padding:8px 14px; border-radius:100px; border:1px solid var(--line); background:var(--white); font-size:12.5px; font-weight:700; color:var(--slate); cursor:pointer; white-space:nowrap; }
   .filter-pill.active{ background:var(--ink); color:var(--white); border-color:var(--ink); }
 
-  .detail-hero{ height:180px; background:linear-gradient(135deg,#F3E9CE,#E1CE93); display:flex; align-items:center; justify-content:center; position:relative;}
+  .detail-hero{ height:180px; flex-shrink:0; background:linear-gradient(135deg,#F3E9CE,#E1CE93); display:flex; align-items:center; justify-content:center; position:relative;}
   .detail-hero .badge{ position:absolute; top:16px; right:16px; }
-  .detail-body{ padding:20px; }
+  .detail-body{
+    flex:1; min-height:0; overflow-y:auto;
+    -ms-overflow-style:none; scrollbar-width:none; -webkit-overflow-scrolling:touch;
+    padding:20px;
+  }
+  .detail-body::-webkit-scrollbar{ display:none; }
   .detail-title{ font-size:21px; font-weight:700; margin:0 0 4px 0; }
   .detail-farmer{ font-size:13px; color:var(--slate); margin-bottom:18px; }
   .detail-grid{ display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:20px; }
