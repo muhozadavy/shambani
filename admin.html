@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Shambani &middot; Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --yellow:#FFC244; --yellow-dark:#F0A82E; --ink:#1A1A1A; --white:#FFFFFF;
+    --bg:#FAFAF7; --green:#2E7D46; --green-bg:#E8F5EC; --slate:#6B6B6B;
+    --line:#EDEDEA; --red:#C1462F; --red-bg:#FBEAE6;
+  }
+  *{box-sizing:border-box;}
+  body{ margin:0; font-family:'Inter',system-ui,sans-serif; background:var(--bg); color:var(--ink); }
+  h1,h2,h3{ font-family:'Poppins',sans-serif; }
+
+  /* ---------- Login ---------- */
+  #loginScreen{ min-height:100vh; display:flex; align-items:center; justify-content:center; }
+  .login-card{ background:var(--white); border:1px solid var(--line); border-radius:20px; padding:36px; width:100%; max-width:360px; }
+  .login-card h1{ font-size:20px; margin:0 0 6px 0; }
+  .login-card p{ font-size:13px; color:var(--slate); margin:0 0 22px 0; }
+  .field{ margin-bottom:14px; }
+  .field label{ display:block; font-size:12.5px; font-weight:600; margin-bottom:6px; }
+  .field input{ width:100%; padding:11px 13px; border-radius:9px; border:1.5px solid var(--line); font-size:14px; font-family:'Inter',sans-serif; }
+  .field input:focus{ outline:none; border-color:var(--yellow-dark); }
+  .btn{ border:none; border-radius:9px; padding:11px 16px; font-family:'Poppins',sans-serif; font-weight:600; font-size:13.5px; cursor:pointer; }
+  .btn-primary{ background:var(--ink); color:#fff; width:100%; }
+  .btn-danger{ background:var(--red-bg); color:var(--red); }
+  .btn-ghost{ background:var(--white); border:1.5px solid var(--line); color:var(--ink); }
+  .err{ color:var(--red); font-size:12.5px; font-weight:600; margin:-6px 0 14px 0; display:none; }
+
+  /* ---------- Dashboard shell ---------- */
+  #dashScreen{ display:none; }
+  .topbar{ background:var(--white); border-bottom:1px solid var(--line); padding:14px 24px; display:flex; align-items:center; justify-content:space-between; }
+  .brand{ display:flex; align-items:center; gap:10px; font-family:'Poppins',sans-serif; font-weight:700; font-size:15px; }
+  .brand .dot{ width:10px; height:10px; border-radius:50%; background:var(--yellow); }
+  .topbar .who{ font-size:12.5px; color:var(--slate); }
+  .layout{ display:flex; min-height:calc(100vh - 57px); }
+  .sidebar{ width:210px; background:var(--white); border-right:1px solid var(--line); padding:16px 10px; flex-shrink:0; }
+  .nav-item{ padding:10px 14px; border-radius:9px; font-size:13.5px; font-weight:600; color:var(--slate); cursor:pointer; margin-bottom:3px; display:flex; justify-content:space-between; align-items:center; }
+  .nav-item.active{ background:var(--ink); color:#fff; }
+  .nav-count{ font-size:11px; background:var(--line); color:var(--slate); padding:1px 7px; border-radius:100px; }
+  .nav-item.active .nav-count{ background:rgba(255,255,255,.2); color:#fff; }
+  .main{ flex:1; padding:24px 28px; overflow-x:auto; }
+  .main h2{ font-size:19px; margin:0 0 4px 0; }
+  .main .sub{ font-size:12.5px; color:var(--slate); margin:0 0 18px 0; }
+  .toolbar{ display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; }
+
+  table{ width:100%; border-collapse:collapse; background:var(--white); border:1px solid var(--line); border-radius:12px; overflow:hidden; }
+  thead th{ text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.3px; color:var(--slate); font-weight:700; padding:10px 14px; background:var(--bg); border-bottom:1px solid var(--line); white-space:nowrap; }
+  tbody td{ padding:11px 14px; font-size:13px; border-bottom:1px solid var(--line); vertical-align:top; }
+  tbody tr:last-child td{ border-bottom:none; }
+  tbody tr:hover{ background:#FCFBF7; }
+  .pill{ display:inline-block; padding:3px 9px; border-radius:100px; font-size:11px; font-weight:700; }
+  .pill.available, .pill.open, .pill.accepted{ background:var(--green-bg); color:var(--green); }
+  .pill.reserved, .pill.pending{ background:#FFF2DA; color:#9A6B12; }
+  .pill.sold, .pill.declined, .pill.withdrawn, .pill.fulfilled{ background:var(--line); color:var(--slate); }
+  .mono{ font-family:monospace; font-size:11.5px; color:var(--slate); }
+  .empty{ padding:40px; text-align:center; color:var(--slate); font-size:13.5px; }
+  .del-btn{ background:none; border:none; color:var(--red); font-size:12px; font-weight:700; cursor:pointer; padding:5px 9px; border-radius:6px; }
+  .del-btn:hover{ background:var(--red-bg); }
+  .loading{ padding:40px; text-align:center; color:var(--slate); font-size:13px; }
+  .denied{ min-height:100vh; display:flex; align-items:center; justify-content:center; flex-direction:column; gap:10px; text-align:center; padding:24px; }
+  .denied h2{ margin:0; }
+  .denied p{ color:var(--slate); font-size:13.5px; max-width:360px; margin:0; }
+</style>
+</head>
+<body>
+
+<!-- ================= LOGIN ================= -->
+<div id="loginScreen">
+  <div class="login-card">
+    <h1>Shambani Admin</h1>
+    <p id="authSub">Sign in with your admin account.</p>
+    <div class="field">
+      <label>Email</label>
+      <input type="email" id="authEmail" placeholder="you@example.com" />
+    </div>
+    <div class="field">
+      <label>Password</label>
+      <input type="password" id="authPassword" placeholder="Password" />
+    </div>
+    <p class="err" id="authError"></p>
+    <button class="btn btn-primary" id="authSubmitBtn" onclick="handleAuthSubmit()">Sign in</button>
+    <p style="text-align:center; font-size:12px; color:var(--slate); margin-top:16px;">
+      No account yet? <span style="color:var(--yellow-dark); font-weight:700; cursor:pointer;" onclick="toggleAuthMode()" id="authToggleLink">Create one</span>
+    </p>
+  </div>
+</div>
+
+<!-- ================= ACCESS DENIED ================= -->
+<div class="denied" id="deniedScreen" style="display:none;">
+  <h2>Not an admin account</h2>
+  <p>This account signed in fine, but isn't on the admin allowlist. Ask whoever set up the database to add your user id to <span class="mono">marketplace.admins</span>.</p>
+  <button class="btn btn-ghost" onclick="handleLogout()">Sign out</button>
+</div>
+
+<!-- ================= DASHBOARD ================= -->
+<div id="dashScreen">
+  <div class="topbar">
+    <div class="brand"><div class="dot"></div> Shambani Admin</div>
+    <div style="display:flex; align-items:center; gap:14px;">
+      <span class="who" id="whoAmI"></span>
+      <button class="btn btn-ghost" onclick="handleLogout()">Sign out</button>
+    </div>
+  </div>
+  <div class="layout">
+    <div class="sidebar" id="sidebar"></div>
+    <div class="main">
+      <h2 id="sectionTitle">Farmers</h2>
+      <p class="sub" id="sectionSub">Everyone who has completed farmer onboarding.</p>
+      <div class="toolbar">
+        <span></span>
+        <button class="btn btn-ghost" onclick="loadCurrentSection()">Refresh</button>
+      </div>
+      <div id="tableWrap"><div class="loading">Loading&hellip;</div></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const SUPABASE_URL = 'https://xznyqhikkpojzhspokfa.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_w3sdCnlk3FHPPJ4a5EwsIw_sUUHNKf5';
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, { db: { schema: 'marketplace' } });
+let authMode = 'login';
+
+const SECTIONS = [
+  { id:'farmers', label:'Farmers', sub:'Everyone who has completed farmer onboarding.' },
+  { id:'buyers', label:'Buyers', sub:'Everyone who has completed buyer onboarding.' },
+  { id:'listings', label:'Listings', sub:'Crop listings published by farmers.' },
+  { id:'buying_requests', label:'Buying requests', sub:'RFQs posted by buyers.' },
+  { id:'offers', label:'Offers', sub:"Farmers' responses to buying requests." },
+  { id:'purchase_requests', label:'Purchase requests', sub:'Direct requests buyers sent from Browse.' }
+];
+let currentSection = 'farmers';
+let sectionCounts = {};
+
+function toggleAuthMode(){
+  authMode = authMode === 'login' ? 'signup' : 'login';
+  document.getElementById('authError').style.display = 'none';
+  document.getElementById('authSubmitBtn').textContent = authMode === 'login' ? 'Sign in' : 'Create account';
+  document.getElementById('authSub').textContent = authMode === 'login' ? 'Sign in with your admin account.' : "Create an account, then ask whoever set up the database to add it to marketplace.admins.";
+  document.getElementById('authToggleLink').textContent = authMode === 'login' ? 'Create one' : 'Sign in instead';
+}
+
+function showAuthError(msg){
+  const el = document.getElementById('authError');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+async function handleAuthSubmit(){
+  const email = document.getElementById('authEmail').value.trim();
+  const password = document.getElementById('authPassword').value;
+  document.getElementById('authError').style.display = 'none';
+  if(!email || !password){ showAuthError('Enter your email and password'); return; }
+
+  const btn = document.getElementById('authSubmitBtn');
+  btn.disabled = true;
+
+  if(authMode === 'signup'){
+    const { data, error } = await sb.auth.signUp({ email, password });
+    btn.disabled = false;
+    if(error){ showAuthError(error.message); return; }
+    if(!data.session){
+      showAuthError('Check your email to confirm the account, then sign in.');
+      authMode = 'login';
+      return;
+    }
+    await enterDashboard();
+  } else {
+    const { data, error } = await sb.auth.signInWithPassword({ email, password });
+    btn.disabled = false;
+    if(error){ showAuthError(error.message); return; }
+    await enterDashboard();
+  }
+}
+
+async function handleLogout(){
+  await sb.auth.signOut();
+  document.getElementById('dashScreen').style.display = 'none';
+  document.getElementById('deniedScreen').style.display = 'none';
+  document.getElementById('loginScreen').style.display = 'flex';
+  document.getElementById('authEmail').value = '';
+  document.getElementById('authPassword').value = '';
+}
+
+async function checkSessionOnLoad(){
+  const { data: { session } } = await sb.auth.getSession();
+  if(session) await enterDashboard();
+}
+
+async function enterDashboard(){
+  const { data: isAdmin, error } = await sb.rpc('is_admin');
+  if(error || !isAdmin){
+    document.getElementById('loginScreen').style.display = 'none';
+    document.getElementById('deniedScreen').style.display = 'flex';
+    return;
+  }
+  const { data: { user } } = await sb.auth.getUser();
+  document.getElementById('whoAmI').textContent = user.email;
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('deniedScreen').style.display = 'none';
+  document.getElementById('dashScreen').style.display = 'block';
+  renderSidebar();
+  await loadAllCounts();
+  setSection('farmers');
+}
+
+function renderSidebar(){
+  const el = document.getElementById('sidebar');
+  el.innerHTML = SECTIONS.map(s => `
+    <div class="nav-item ${s.id === currentSection ? 'active' : ''}" onclick="setSection('${s.id}')">
+      <span>${s.label}</span>
+      <span class="nav-count">${sectionCounts[s.id] != null ? sectionCounts[s.id] : '\u2013'}</span>
+    </div>
+  `).join('');
+}
+
+async function loadAllCounts(){
+  for(const s of SECTIONS){
+    const { count } = await sb.from(s.id).select('*', { count: 'exact', head: true });
+    sectionCounts[s.id] = count != null ? count : 0;
+  }
+  renderSidebar();
+}
+
+function setSection(id){
+  currentSection = id;
+  const meta = SECTIONS.find(s => s.id === id);
+  document.getElementById('sectionTitle').textContent = meta.label;
+  document.getElementById('sectionSub').textContent = meta.sub;
+  renderSidebar();
+  loadCurrentSection();
+}
+
+function fmtDate(d){
+  if(!d) return '-';
+  return new Date(d).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' });
+}
+function esc(v){
+  if(v == null) return '';
+  return String(v).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+}
+
+async function loadCurrentSection(){
+  const wrap = document.getElementById('tableWrap');
+  wrap.innerHTML = '<div class="loading">Loading&hellip;</div>';
+
+  let rows = [], error = null, cols = [];
+
+  if(currentSection === 'farmers'){
+    const res = await sb.from('farmers').select('*').order('created_at', { ascending: false });
+    rows = res.data; error = res.error;
+    cols = [
+      { h:'Name', v:r=>esc(r.name) },
+      { h:'Phone', v:r=>esc(r.phone)||'-' },
+      { h:'Location', v:r=>esc([r.village,r.district,r.region].filter(Boolean).join(', '))||'-' },
+      { h:'Crops', v:r=>esc((r.crops||[]).join(', '))||'-' },
+      { h:'Farm size', v:r=>r.farm_size ? `${r.farm_size} ${esc(r.farm_unit||'')}` : '-' },
+      { h:'Joined', v:r=>fmtDate(r.created_at) }
+    ];
+  } else if(currentSection === 'buyers'){
+    const res = await sb.from('buyers').select('*').order('created_at', { ascending: false });
+    rows = res.data; error = res.error;
+    cols = [
+      { h:'Name', v:r=>esc(r.name) },
+      { h:'Business', v:r=>esc(r.business_name) },
+      { h:'Type', v:r=>esc(r.buyer_type) },
+      { h:'Phone', v:r=>esc(r.phone)||'-' },
+      { h:'Location', v:r=>esc([r.district,r.region].filter(Boolean).join(', '))||'-' },
+      { h:'Joined', v:r=>fmtDate(r.created_at) }
+    ];
+  } else if(currentSection === 'listings'){
+    const res = await sb.from('listings').select('*').order('created_at', { ascending: false });
+    rows = res.data; error = res.error;
+    cols = [
+      { h:'Crop', v:r=>`${esc(r.crop)}${r.variety ? ' &middot; '+esc(r.variety) : ''}` },
+      { h:'Farmer', v:r=>esc(r.farmer_name) },
+      { h:'Qty', v:r=>`${r.quantity.toLocaleString()} ${esc(r.unit)}` },
+      { h:'Price', v:r=>`TZS ${r.price.toLocaleString()}/${esc(r.price_unit)}` },
+      { h:'Status', v:r=>`<span class="pill ${r.status.toLowerCase()}">${esc(r.status)}</span>` },
+      { h:'Created', v:r=>fmtDate(r.created_at) }
+    ];
+  } else if(currentSection === 'buying_requests'){
+    const res = await sb.from('buying_requests').select('*').order('created_at', { ascending: false });
+    rows = res.data; error = res.error;
+    cols = [
+      { h:'Crop', v:r=>`${esc(r.crop)} &middot; ${esc(r.quality)}` },
+      { h:'Buyer', v:r=>esc(r.buyer_business) },
+      { h:'Qty needed', v:r=>`${r.quantity.toLocaleString()} ${esc(r.unit)}` },
+      { h:'Target price', v:r=>`TZS ${r.target_price != null ? r.target_price.toLocaleString() : '-'}/${esc(r.price_unit||'')}` },
+      { h:'Region', v:r=>esc(r.region)||'-' },
+      { h:'Created', v:r=>fmtDate(r.created_at) }
+    ];
+  } else if(currentSection === 'offers'){
+    const res = await sb.from('offers').select('*, buying_requests(crop)').order('created_at', { ascending: false });
+    rows = res.data; error = res.error;
+    cols = [
+      { h:'Crop', v:r=>esc(r.buying_requests ? r.buying_requests.crop : '') || '-' },
+      { h:'Farmer', v:r=>esc(r.farmer_name) },
+      { h:'Qty', v:r=>`${r.quantity.toLocaleString()} ${esc(r.unit)}` },
+      { h:'Price', v:r=>`TZS ${r.price.toLocaleString()}` },
+      { h:'Status', v:r=>`<span class="pill ${r.status.toLowerCase()}">${esc(r.status)}</span>` },
+      { h:'Delivery', v:r=>esc(r.delivery_method)||'-' },
+      { h:'Created', v:r=>fmtDate(r.created_at) }
+    ];
+  } else if(currentSection === 'purchase_requests'){
+    const res = await sb.from('purchase_requests').select('*, listings(crop)').order('created_at', { ascending: false });
+    rows = res.data; error = res.error;
+    cols = [
+      { h:'Crop', v:r=>esc(r.listings ? r.listings.crop : '') || '-' },
+      { h:'Buyer', v:r=>esc(r.buyer_business) },
+      { h:'Qty', v:r=>`${r.quantity.toLocaleString()} ${esc(r.unit)}` },
+      { h:'Price', v:r=>`TZS ${r.price.toLocaleString()}` },
+      { h:'Status', v:r=>`<span class="pill ${r.status.toLowerCase()}">${esc(r.status)}</span>` },
+      { h:'Delivery', v:r=>esc(r.delivery_method)||'-' },
+      { h:'Sent', v:r=>fmtDate(r.created_at) }
+    ];
+  }
+
+  if(error){ wrap.innerHTML = `<div class="empty">Could not load: ${esc(error.message)}</div>`; return; }
+  if(!rows || !rows.length){ wrap.innerHTML = '<div class="empty">No rows yet.</div>'; return; }
+
+  wrap.innerHTML = `<table>
+    <thead><tr>${cols.map(c => `<th>${c.h}</th>`).join('')}<th></th></tr></thead>
+    <tbody>${rows.map(r => `<tr>${cols.map(c => `<td>${c.v(r)}</td>`).join('')}<td><button class="del-btn" onclick="deleteRow('${r.id}')">Delete</button></td></tr>`).join('')}</tbody>
+  </table>`;
+}
+
+async function deleteRow(id){
+  if(!confirm('Delete this row? This cannot be undone, and related rows (offers, requests, etc.) may cascade-delete with it.')) return;
+  const { error } = await sb.from(currentSection).delete().eq('id', id);
+  if(error){ alert('Could not delete: ' + error.message); return; }
+  sectionCounts[currentSection] = Math.max(0, (sectionCounts[currentSection] || 1) - 1);
+  renderSidebar();
+  loadCurrentSection();
+}
+
+checkSessionOnLoad();
+</script>
+</body>
+</html>

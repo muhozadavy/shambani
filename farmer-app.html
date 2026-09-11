@@ -1,0 +1,2126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Shambani Farmer App</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<!-- Leaflet (map library) is loaded on demand by loadLeaflet() only when a map screen is opened, not here -->
+<style>
+  :root{
+    --yellow:#FFC244;
+    --yellow-dark:#F0A82E;
+    --ink:#1A1A1A;
+    --white:#FFFFFF;
+    --bg:#FAFAF7;
+    --green:#2E7D46;
+    --green-bg:#E8F5EC;
+    --slate:#6B6B6B;
+    --line:#EDEDEA;
+    --red:#C1462F;
+    --radius-lg:20px;
+    --radius-md:14px;
+    --radius-sm:10px;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;background:#EDEBE4;}
+  body{
+    font-family:'Inter',system-ui,-apple-system,sans-serif;
+    color:var(--ink);
+    display:flex;
+    justify-content:center;
+    min-height:100vh;
+  }
+  h1,h2,h3,.display{ font-family:'Poppins',system-ui,sans-serif; }
+
+  /* ---------- Phone frame ---------- */
+  .app-frame{
+    width:100%;
+    max-width:412px;
+    min-height:100vh;
+    background:var(--bg);
+    position:relative;
+    overflow:hidden;
+    box-shadow:0 30px 80px rgba(0,0,0,.25);
+  }
+  @media (min-width:480px){
+    body{ padding:28px 12px; }
+    .app-frame{ min-height:860px; height:860px; border-radius:36px; border:8px solid var(--ink); }
+  }
+
+  .screen{
+    display:none;
+    flex-direction:column;
+    height:100%;
+    min-height:100vh;
+    overflow-y:auto;
+    -ms-overflow-style:none;
+    scrollbar-width:none;
+    animation:fadeIn .25s ease;
+  }
+  @media (min-width:480px){ .screen{ min-height:860px; height:860px; } }
+  .screen::-webkit-scrollbar{ display:none; }
+  .screen.active{ display:flex; }
+  @keyframes fadeIn{ from{opacity:0} to{opacity:1} }
+
+  .screen-body{ flex:1; padding:20px 20px 100px 20px; }
+  .screen-body.no-pad-bottom{ padding-bottom:24px; }
+
+  /* ---------- Reusable bits ---------- */
+  .top-header{
+    padding:8px 20px 18px 20px;
+  }
+  .top-header .eyebrow{ font-size:13px; color:var(--slate); margin:0 0 2px 0; font-weight:500;}
+  .top-header h1{ font-size:22px; margin:0; font-weight:700; }
+  .top-header .sub-loc{ display:flex; align-items:center; gap:6px; margin-top:6px; font-size:13px; color:var(--slate); font-weight:500;}
+
+  .btn{
+    display:flex; align-items:center; justify-content:center; gap:8px;
+    border:none; border-radius:100px; font-family:'Poppins',sans-serif;
+    font-weight:600; font-size:15px; cursor:pointer; transition:transform .12s ease;
+    -webkit-user-select:none; user-select:none;
+  }
+  .btn:active{ transform:scale(.97); }
+  .btn-primary{ background:var(--yellow); color:var(--ink); padding:16px 20px; width:100%; }
+  .btn-primary:disabled{ background:#F3E3C1; color:#B9A374; cursor:not-allowed; }
+  .btn-dark{ background:var(--ink); color:var(--white); padding:16px 20px; width:100%; }
+  .btn-ghost{ background:transparent; color:var(--ink); padding:14px 18px; width:100%; border:1.5px solid var(--line); }
+  .btn-sm{ padding:10px 16px; font-size:13px; }
+
+  .field{ margin-bottom:16px; }
+  .field label{ display:block; font-size:13px; font-weight:600; margin-bottom:7px; color:var(--ink); }
+  .hint{ font-size:12px; color:var(--slate); margin-top:6px; font-weight:400; }
+  .field input[type=text], .field input[type=email], .field input[type=password], .field input[type=tel], .field input[type=number], .field input[type=date], .field select, .field textarea{
+    width:100%; padding:14px 15px; border-radius:var(--radius-sm); border:1.5px solid var(--line);
+    background:var(--white); font-family:'Inter',sans-serif; font-size:15px; color:var(--ink); font-weight:500;
+    box-sizing:border-box;
+  }
+  .field input:focus, .field select:focus, .field textarea:focus{ outline:none; border-color:var(--yellow-dark); }
+  .field textarea{ resize:none; min-height:80px; }
+  .input-row{ display:flex; gap:10px; }
+
+  .input-icon-wrap{ position:relative; }
+  .input-icon-wrap .field-icon{ position:absolute; left:15px; top:50%; transform:translateY(-50%); pointer-events:none; }
+  .input-icon-wrap input{ padding-left:44px !important; }
+  .input-icon-wrap input[type=password]{ padding-right:44px !important; }
+  .input-icon-wrap .toggle-visibility{
+    position:absolute; right:6px; top:50%; transform:translateY(-50%);
+    background:none; border:none; padding:8px; cursor:pointer; display:flex; align-items:center; justify-content:center;
+  }
+  .input-row .field{ flex:1; }
+
+  .chip-group{ display:flex; flex-wrap:wrap; gap:9px; }
+  .chip{
+    padding:10px 16px; border-radius:100px; border:1.5px solid var(--line); background:var(--white);
+    font-size:13.5px; font-weight:600; cursor:pointer; color:var(--ink); display:flex; align-items:center; gap:6px;
+  }
+  .chip.selected{ background:var(--ink); border-color:var(--ink); color:var(--white); }
+
+  .card{ background:var(--white); border-radius:var(--radius-md); border:1px solid var(--line); }
+
+  .badge{ font-size:11px; font-weight:700; padding:5px 10px; border-radius:100px; white-space:nowrap; }
+  .badge.available{ background:var(--green-bg); color:var(--green); }
+  .badge.reserved{ background:#FFF2DA; color:#9A6B12; }
+  .badge.sold{ background:#EFEFEF; color:var(--slate); }
+  .badge.open{ background:#FFF2DA; color:#9A6B12; }
+  .badge.responded{ background:var(--green-bg); color:var(--green); }
+  .badge.fulfilled{ background:#EFEFEF; color:var(--slate); }
+  .badge.pending{ background:#FFF2DA; color:#9A6B12; }
+  .badge.accepted{ background:var(--green-bg); color:var(--green); }
+  .badge.declined{ background:#EFEFEF; color:var(--slate); }
+
+  .progress-track{ height:5px; background:var(--line); border-radius:100px; overflow:hidden; margin-top:9px; }
+  .progress-fill{ height:100%; background:var(--yellow); border-radius:100px; }
+  .progress-label{ font-size:11px; color:var(--slate); font-weight:600; margin-top:5px; }
+
+  .request-photo{ background:linear-gradient(135deg,#DCEBD9,#BFE0B8); }
+  .buyer-tag{ font-size:11.5px; color:var(--slate); font-weight:600; margin-top:2px; }
+  .offer-summary{ background:var(--green-bg); border:1px solid #CFE9D5; border-radius:var(--radius-md); padding:16px; margin-bottom:18px; }
+  .offer-summary .lbl{ font-size:11.5px; color:var(--green); font-weight:700; text-transform:uppercase; letter-spacing:.3px; margin-bottom:8px; }
+  .offer-summary .row{ display:flex; justify-content:space-between; font-size:13.5px; font-weight:600; padding:4px 0; }
+
+  .unread-dot{
+    position:absolute; top:-7px; left:-7px;
+    min-width:22px; height:22px; padding:0 6px;
+    border-radius:100px; background:var(--red); color:#fff;
+    font-size:11.5px; font-weight:700; font-family:'Poppins',sans-serif;
+    display:flex; align-items:center; justify-content:center;
+    border:2px solid var(--bg);
+  }
+
+  .interest-card{ padding:14px; margin-bottom:12px; }
+  .interest-top{ display:flex; justify-content:space-between; align-items:flex-start; gap:10px; }
+  .interest-buyer{ display:flex; gap:10px; align-items:center; }
+  .interest-buyer .av{ width:38px; height:38px; border-radius:50%; background:var(--yellow); display:flex; align-items:center; justify-content:center; font-family:'Poppins',sans-serif; font-weight:700; font-size:14px; flex-shrink:0; }
+  .interest-buyer .nm{ font-weight:700; font-size:13.5px; }
+  .interest-buyer .loc{ font-size:12px; color:var(--slate); margin-top:1px; }
+  .interest-meta-row{ display:flex; justify-content:space-between; align-items:center; margin-top:12px; font-size:13px; }
+  .interest-meta-row .qty{ color:var(--slate); }
+  .interest-meta-row .price{ font-weight:700; font-family:'Poppins',sans-serif; }
+  .interest-actions{ display:flex; gap:8px; margin-top:12px; }
+
+  .connect-card{ background:var(--green-bg); border:1px solid #CFE9D5; border-radius:var(--radius-sm); padding:14px; margin-top:12px; }
+  .connect-title{ display:flex; align-items:center; gap:6px; font-family:'Poppins',sans-serif; font-weight:700; font-size:13.5px; color:var(--green); margin-bottom:8px; }
+  .connect-phone{ font-size:14px; font-weight:700; margin-bottom:12px; }
+  .wa-btn{
+    display:flex; align-items:center; justify-content:center; gap:8px;
+    background:#25D366; color:#fff; border:none; border-radius:100px;
+    padding:12px 16px; font-family:'Poppins',sans-serif; font-weight:600; font-size:13.5px;
+    text-decoration:none; width:100%; box-sizing:border-box; margin-bottom:12px;
+  }
+  .delivery-label{ font-size:11.5px; font-weight:700; color:var(--slate); text-transform:uppercase; letter-spacing:.3px; margin-bottom:8px; }
+  .delivery-chips{ display:flex; flex-wrap:wrap; gap:8px; }
+  .delivery-chip{ padding:8px 13px; border-radius:100px; border:1.5px solid var(--line); background:var(--white); font-size:12.5px; font-weight:600; cursor:pointer; }
+  .delivery-chip.selected{ background:var(--ink); border-color:var(--ink); color:var(--white); }
+
+  .icon{ width:20px; height:20px; display:inline-block; flex-shrink:0; }
+
+  /* ---------- Login ---------- */
+  #screen-login .screen-body{ display:flex; flex-direction:column; justify-content:center; padding:20px 26px; }
+  .brand-mark{
+    width:64px; height:64px; border-radius:18px; background:var(--yellow);
+    display:flex; align-items:center; justify-content:center; margin-bottom:22px;
+  }
+  .login-title{ font-size:26px; font-weight:700; margin:0 0 8px 0; line-height:1.25; }
+  .login-sub{ font-size:14.5px; color:var(--slate); margin:0 0 30px 0; line-height:1.5; }
+
+  /* ---------- Onboarding ---------- */
+  .onboard-header{ padding:16px 20px 6px 20px; }
+  .step-track{ display:flex; gap:6px; margin-bottom:18px; }
+  .step-track span{ height:5px; flex:1; border-radius:100px; background:var(--line); }
+  .step-track span.done{ background:var(--yellow); }
+  .step-label{ font-size:12.5px; font-weight:700; color:var(--yellow-dark); text-transform:uppercase; letter-spacing:.4px; margin-bottom:6px; }
+  .step-title{ font-size:20px; font-weight:700; margin:0 0 4px 0; }
+  .step-desc{ font-size:13.5px; color:var(--slate); margin:0 0 22px 0; line-height:1.5; }
+
+  .location-map{ height:180px; border-radius:var(--radius-md); overflow:hidden; border:1.5px solid var(--line); margin-bottom:10px; position:relative; z-index:1; }
+  .locate-row{ display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
+  .locate-status{ font-size:12px; color:var(--slate); font-weight:500; }
+  .distance-badge{ display:inline-flex; align-items:center; gap:4px; font-size:11.5px; font-weight:700; color:var(--slate); background:var(--bg); border:1px solid var(--line); padding:3px 9px; border-radius:100px; margin-top:6px; }
+  .sort-row{ display:flex; align-items:center; justify-content:space-between; padding:0 20px 10px 20px; }
+  .view-toggle{ display:flex; background:var(--white); border:1px solid var(--line); border-radius:100px; padding:3px; }
+  .view-toggle-btn{ padding:6px 14px; border-radius:100px; font-size:12px; font-weight:700; cursor:pointer; color:var(--slate); }
+  .view-toggle-btn.active{ background:var(--ink); color:var(--white); }
+  .map-view{ height:340px; border-radius:var(--radius-md); overflow:hidden; margin:0 20px 14px 20px; border:1.5px solid var(--line); }
+  .leaflet-pin-you{ background:var(--ink); width:16px; height:16px; border-radius:50%; border:3px solid var(--yellow); }
+  .leaflet-pin-item{ background:var(--red); width:14px; height:14px; border-radius:50%; border:2px solid #fff; }
+
+  .map-box{
+    height:140px; border-radius:var(--radius-md); background:
+      radial-gradient(circle at 30% 30%, #DCEBD9 0, #DCEBD9 40%, transparent 41%),
+      radial-gradient(circle at 70% 60%, #DCEBD9 0, #DCEBD9 25%, transparent 26%),
+      #EAF2E4;
+    position:relative; margin-bottom:16px; overflow:hidden; border:1.5px solid var(--line);
+  }
+  .map-box .pin{
+    position:absolute; top:50%; left:50%; transform:translate(-50%,-100%);
+    width:34px; height:34px; background:var(--red); border-radius:50% 50% 50% 0; rotate:-45deg;
+    display:flex; align-items:center; justify-content:center; box-shadow:0 4px 10px rgba(0,0,0,.2);
+  }
+  .map-box .pin::after{ content:''; width:12px; height:12px; background:var(--white); border-radius:50%; rotate:45deg; }
+  .map-box .grid-lines{ position:absolute; inset:0; background-image:linear-gradient(#D7E4D0 1px, transparent 1px), linear-gradient(90deg, #D7E4D0 1px, transparent 1px); background-size:26px 26px; opacity:.6;}
+
+  .upload-box{
+    border:1.5px dashed #D7D3C8; border-radius:var(--radius-md); padding:22px;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px;
+    background:var(--white); text-align:center; cursor:pointer;
+  }
+  .upload-box .upload-title{ font-size:13.5px; font-weight:700; }
+  .upload-box .upload-sub{ font-size:12px; color:var(--slate); }
+  .photo-thumb-row{ display:flex; gap:10px; flex-wrap:wrap; margin-top:12px; }
+  .photo-thumb{ width:64px; height:64px; border-radius:10px; background:linear-gradient(135deg,#E9E4D6,#DCD5C2); display:flex; align-items:center; justify-content:center; position:relative; overflow:hidden;}
+  .photo-thumb img{ width:100%; height:100%; object-fit:cover; display:block; }
+  .photo-thumb .x{ position:absolute; top:-6px; right:-6px; width:20px; height:20px; background:var(--ink); border-radius:50%; display:flex; align-items:center; justify-content:center; }
+
+  .onboard-nav{ display:flex; gap:10px; padding:14px 20px 22px 20px; background:var(--bg); position:sticky; bottom:0; }
+  .onboard-nav .btn-ghost{ width:auto; padding:16px 18px; }
+  .onboard-nav .btn-primary{ flex:1; }
+
+  /* ---------- Home ---------- */
+  .stat-row{ display:flex; gap:10px; margin-bottom:18px; }
+  .stat-card{ flex:1; background:var(--white); border:1px solid var(--line); border-radius:var(--radius-md); padding:14px; }
+  .stat-card .stat-num{ font-family:'Poppins',sans-serif; font-size:22px; font-weight:700; }
+  .stat-card .stat-label{ font-size:11.5px; color:var(--slate); font-weight:600; margin-top:2px; }
+
+  .add-cta{
+    background:var(--ink); border-radius:var(--radius-lg); padding:18px 20px; display:flex; align-items:center;
+    justify-content:space-between; margin-bottom:22px; cursor:pointer;
+  }
+  .add-cta .txt strong{ color:var(--white); font-family:'Poppins',sans-serif; font-size:15.5px; display:block; }
+  .add-cta .txt span{ color:#B9B9B9; font-size:12.5px; }
+  .add-cta .plus-circle{ width:44px; height:44px; border-radius:50%; background:var(--yellow); display:flex; align-items:center; justify-content:center; flex-shrink:0;}
+
+  .section-heading{ display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+  .section-heading h3{ font-size:16px; margin:0; font-weight:700; }
+  .section-heading .see-all{ font-size:12.5px; font-weight:700; color:var(--yellow-dark); cursor:pointer; }
+
+  .listing-card{ display:flex; gap:12px; padding:12px; margin-bottom:12px; cursor:pointer; position:relative; }
+  .listing-photo{ width:66px; height:66px; border-radius:12px; flex-shrink:0; background:linear-gradient(135deg,#F3E9CE,#E7D8AE); display:flex; align-items:center; justify-content:center; overflow:hidden; }
+  .listing-photo img{ width:100%; height:100%; object-fit:cover; display:block; }
+  .listing-info{ flex:1; min-width:0; }
+  .listing-top{ display:flex; justify-content:space-between; align-items:flex-start; gap:8px; }
+  .listing-info .crop-name{ font-weight:700; font-size:14.5px; }
+  .listing-info .meta{ font-size:12.5px; color:var(--slate); margin-top:4px; }
+  .listing-info .price{ font-family:'Poppins',sans-serif; font-weight:700; font-size:14px; margin-top:6px; }
+
+  .empty-state{ text-align:center; padding:36px 20px; color:var(--slate); }
+  .empty-state .icon-wrap{ width:56px; height:56px; border-radius:50%; background:var(--white); border:1px solid var(--line); display:flex; align-items:center; justify-content:center; margin:0 auto 14px auto; }
+  .empty-state strong{ display:block; color:var(--ink); font-size:14.5px; margin-bottom:4px; }
+  .empty-state p{ font-size:13px; margin:0; line-height:1.5; }
+
+  /* ---------- Bottom nav ---------- */
+  .bottom-nav{
+    position:absolute; left:0; right:0; bottom:0;
+    background:var(--white); border-top:1px solid var(--line);
+    display:flex; align-items:center; justify-content:space-around;
+    padding:10px 6px calc(10px + env(safe-area-inset-bottom)) 6px; z-index:5;
+  }
+  .nav-item{ display:flex; flex-direction:column; align-items:center; gap:4px; cursor:pointer; padding:4px 10px; }
+  .nav-item span{ font-size:10.5px; font-weight:600; color:#B7B4A9; }
+  .nav-item.active span{ color:var(--ink); }
+  .nav-fab{ width:48px; height:48px; border-radius:50%; background:var(--yellow); display:flex; align-items:center; justify-content:center; margin-top:-26px; box-shadow:0 8px 16px rgba(255,194,68,.5); }
+
+  /* ---------- Detail / listings / profile headers ---------- */
+  .sub-header{ display:flex; align-items:center; gap:14px; padding:16px 20px 8px 20px; }
+  .back-circle{ width:36px; height:36px; border-radius:50%; background:var(--white); border:1px solid var(--line); display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0;}
+  .sub-header h2{ font-size:17px; margin:0; font-weight:700; }
+
+  .filter-row{ display:flex; gap:8px; padding:12px 20px 4px 20px; flex-wrap:wrap; }
+  .filter-pill{ padding:8px 14px; border-radius:100px; border:1px solid var(--line); background:var(--white); font-size:12.5px; font-weight:700; color:var(--slate); cursor:pointer; white-space:nowrap; }
+  .filter-pill.active{ background:var(--ink); color:var(--white); border-color:var(--ink); }
+
+  .detail-hero{ height:180px; background:linear-gradient(135deg,#F3E9CE,#E1CE93); display:flex; align-items:center; justify-content:center; position:relative;}
+  .detail-hero .badge{ position:absolute; top:16px; right:16px; }
+  .detail-body{ padding:20px; }
+  .detail-title{ font-size:21px; font-weight:700; margin:0 0 4px 0; }
+  .detail-farmer{ font-size:13px; color:var(--slate); margin-bottom:18px; }
+  .detail-grid{ display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:20px; }
+  .detail-stat{ background:var(--white); border:1px solid var(--line); border-radius:var(--radius-sm); padding:12px 14px; }
+  .detail-stat .lbl{ font-size:11.5px; color:var(--slate); font-weight:600; margin-bottom:4px; }
+  .detail-stat .val{ font-size:14.5px; font-weight:700; font-family:'Poppins',sans-serif; }
+  .detail-actions{ display:flex; gap:10px; }
+
+  /* ---------- Profile ---------- */
+  .profile-head{ display:flex; align-items:center; gap:14px; padding:8px 20px 20px 20px; }
+  .avatar{ width:60px; height:60px; border-radius:50%; background:var(--yellow); display:flex; align-items:center; justify-content:center; font-family:'Poppins',sans-serif; font-weight:700; font-size:22px; flex-shrink:0; position:relative; overflow:hidden;}
+  .avatar-img{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover; display:none; }
+  .profile-name{ font-size:17px; font-weight:700; }
+  .profile-loc{ font-size:12.5px; color:var(--slate); margin-top:3px; display:flex; align-items:center; gap:5px;}
+  .verify-badge{ display:inline-flex; align-items:center; gap:4px; background:var(--green-bg); color:var(--green); font-size:11px; font-weight:700; padding:4px 9px; border-radius:100px; margin-top:6px;}
+
+  .info-row{ display:flex; justify-content:space-between; align-items:center; padding:14px 0; border-bottom:1px solid var(--line); }
+  .info-row:last-child{ border-bottom:none; }
+  .info-row .lbl{ font-size:13.5px; color:var(--slate); font-weight:500; }
+  .info-row .val{ font-size:13.5px; font-weight:700; text-align:right; max-width:60%; }
+
+  .toast{
+    position:absolute; left:20px; right:20px; bottom:96px; background:var(--ink); color:var(--white);
+    padding:14px 16px; border-radius:var(--radius-sm); font-size:13.5px; font-weight:600; display:flex; align-items:center; gap:10px;
+    opacity:0; transform:translateY(10px); pointer-events:none; transition:all .25s ease; z-index:20;
+  }
+  .toast.show{ opacity:1; transform:translateY(0); }
+</style>
+</head>
+<body>
+
+<div class="app-frame" id="appFrame">
+
+  <!-- ================= LOGIN ================= -->
+  <div class="screen active" id="screen-login">
+    <div class="screen-body">
+      <div class="brand-mark">
+        <svg class="icon" style="width:34px;height:34px" viewBox="0 0 24 24" fill="none"><path d="M12 2L3 7v6c0 5 4 8.5 9 9 5-.5 9-4 9-9V7l-9-5z" fill="#1A1A1A"/><path d="M8.5 12.5l2.5 2.5 5-5" stroke="#FFC244" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <h1 class="login-title" id="authTitle">Karibu Shambani</h1>
+      <p class="login-sub" id="authSub">List your harvest, reach verified wholesale buyers, and get fair prices, straight from your phone.</p>
+
+      <div class="field">
+        <label>Email</label>
+        <div class="input-icon-wrap">
+          <svg class="icon field-icon" style="width:18px;height:18px" viewBox="0 0 24 24" fill="none"><path d="M4 6h16v12H4V6z" stroke="#9A968A" stroke-width="1.6" stroke-linejoin="round"/><path d="M4 7l8 6 8-6" stroke="#9A968A" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <input type="email" id="authEmail" placeholder="you@example.com" autocomplete="email" />
+        </div>
+      </div>
+      <div class="field">
+        <label>Password</label>
+        <div class="input-icon-wrap">
+          <svg class="icon field-icon" style="width:18px;height:18px" viewBox="0 0 24 24" fill="none"><rect x="5" y="10" width="14" height="9" rx="2" stroke="#9A968A" stroke-width="1.6"/><path d="M8 10V7a4 4 0 018 0v3" stroke="#9A968A" stroke-width="1.6" stroke-linecap="round"/></svg>
+          <input type="password" id="authPassword" placeholder="At least 6 characters" autocomplete="current-password" />
+          <button type="button" class="toggle-visibility" id="authPasswordToggle" onclick="togglePasswordVisibility('authPassword','authPasswordToggle')" aria-label="Show password">
+            <svg class="icon" style="width:18px;height:18px" viewBox="0 0 24 24" fill="none"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" stroke="#9A968A" stroke-width="1.6"/><circle cx="12" cy="12" r="3" stroke="#9A968A" stroke-width="1.6"/></svg>
+          </button>
+        </div>
+      </div>
+      <p id="authError" style="display:none; color:var(--red); font-size:12.5px; font-weight:600; margin:-8px 0 16px 0;"></p>
+      <button class="btn btn-primary" id="authSubmitBtn" onclick="handleAuthSubmit()">Create account</button>
+      <p class="hint" style="text-align:center;margin-top:16px;">
+        <span id="authToggleText">Already have an account?</span>
+        <span style="color:var(--yellow-dark); font-weight:700; cursor:pointer;" onclick="toggleAuthMode()" id="authToggleLink">Sign in</span>
+      </p>
+    </div>
+  </div>
+
+  <!-- ================= ONBOARDING STEP 1: basic info ================= -->
+  <div class="screen" id="screen-ob1">
+    <div class="onboard-header">
+      <div class="step-track"><span class="done"></span><span></span><span></span><span></span></div>
+      <div class="step-label">Step 1 of 4</div>
+      <h2 class="step-title">Tell us about you</h2>
+      <p class="step-desc">This helps buyers know who they're sourcing from.</p>
+    </div>
+    <div class="screen-body no-pad-bottom" style="padding-top:0;">
+      <div class="field">
+        <label>Full name</label>
+        <input type="text" id="obName" placeholder="e.g. Juma Mwakalinga" />
+      </div>
+      <div class="field">
+        <label>Phone number</label>
+        <input type="tel" id="obPhone" placeholder="+255 7XX XXX XXX" />
+        <div class="hint">Buyers only see this once they're connected with you.</div>
+      </div>
+      <div class="field">
+        <label>Farm / business name (optional)</label>
+        <input type="text" id="obFarmName" placeholder="e.g. Mwakalinga Family Farm" />
+      </div>
+      <div class="field">
+        <label>Years farming</label>
+        <input type="number" id="obYears" placeholder="e.g. 8" />
+      </div>
+    </div>
+    <div class="onboard-nav">
+      <button class="btn btn-ghost" onclick="goToScreen('screen-login')" style="max-width:56px;">
+        <svg class="icon" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="#1A1A1A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <button class="btn btn-primary" onclick="goToScreen('screen-ob2')">Continue</button>
+    </div>
+  </div>
+
+  <!-- ================= ONBOARDING STEP 2: location ================= -->
+  <div class="screen" id="screen-ob2">
+    <div class="onboard-header">
+      <div class="step-track"><span class="done"></span><span class="done"></span><span></span><span></span></div>
+      <div class="step-label">Step 2 of 4</div>
+      <h2 class="step-title">Where's your farm?</h2>
+      <p class="step-desc">Location helps match you with nearby buyers and cuts transport cost.</p>
+    </div>
+    <div class="screen-body no-pad-bottom" style="padding-top:0;">
+      <div class="location-map" id="obLocationMap"></div>
+      <div class="locate-row">
+        <span class="locate-status" id="obLocateStatus">Tap the map or drag the pin to set your farm's location</span>
+      </div>
+      <div class="input-row">
+        <div class="field">
+          <label>Region</label>
+          <select id="obRegion">
+            <option>Arusha</option><option>Kilimanjaro</option><option>Manyara</option>
+            <option>Dodoma</option><option>Mbeya</option><option>Iringa</option><option>Morogoro</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>District</label>
+          <input type="text" id="obDistrict" placeholder="e.g. Arumeru" />
+        </div>
+      </div>
+      <div class="field">
+        <label>Village / ward</label>
+        <input type="text" id="obVillage" placeholder="e.g. Maji ya Chai" />
+      </div>
+      <div class="input-row">
+        <div class="field">
+          <label>Farm size</label>
+          <input type="number" id="obFarmSize" placeholder="e.g. 3.5" />
+        </div>
+        <div class="field">
+          <label>Unit</label>
+          <select id="obFarmUnit"><option>Acres</option><option>Hectares</option></select>
+        </div>
+      </div>
+    </div>
+    <div class="onboard-nav">
+      <button class="btn btn-ghost" onclick="goToScreen('screen-ob1')" style="max-width:56px;">
+        <svg class="icon" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="#1A1A1A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <button class="btn btn-primary" onclick="goToScreen('screen-ob3')">Continue</button>
+    </div>
+  </div>
+
+  <!-- ================= ONBOARDING STEP 3: crops ================= -->
+  <div class="screen" id="screen-ob3">
+    <div class="onboard-header">
+      <div class="step-track"><span class="done"></span><span class="done"></span><span class="done"></span><span></span></div>
+      <div class="step-label">Step 3 of 4</div>
+      <h2 class="step-title">What do you grow?</h2>
+      <p class="step-desc">Select all crops you currently farm. You can add specific listings later.</p>
+    </div>
+    <div class="screen-body no-pad-bottom" style="padding-top:0;">
+      <div class="chip-group" id="cropChips">
+        <div class="chip" data-crop="Maize">Maize</div>
+        <div class="chip" data-crop="Beans">Beans</div>
+        <div class="chip" data-crop="Tomatoes">Tomatoes</div>
+        <div class="chip" data-crop="Onions">Onions</div>
+        <div class="chip" data-crop="Bananas">Bananas</div>
+        <div class="chip" data-crop="Coffee">Coffee</div>
+        <div class="chip" data-crop="Avocado">Avocado</div>
+        <div class="chip" data-crop="Rice">Rice</div>
+        <div class="chip" data-crop="Cassava">Cassava</div>
+        <div class="chip" data-crop="Sunflower">Sunflower</div>
+      </div>
+      <div class="field" style="margin-top:20px;">
+        <label>Certifications (optional)</label>
+        <div class="chip-group" id="certChips">
+          <div class="chip" data-cert="Organic">Organic</div>
+          <div class="chip" data-cert="GlobalG.A.P">GlobalG.A.P</div>
+          <div class="chip" data-cert="Fair Trade">Fair Trade</div>
+          <div class="chip" data-cert="None">None yet</div>
+        </div>
+      </div>
+    </div>
+    <div class="onboard-nav">
+      <button class="btn btn-ghost" onclick="goToScreen('screen-ob2')" style="max-width:56px;">
+        <svg class="icon" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="#1A1A1A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <button class="btn btn-primary" onclick="goToScreen('screen-ob4')">Continue</button>
+    </div>
+  </div>
+
+  <!-- ================= ONBOARDING STEP 4: photo & finish ================= -->
+  <div class="screen" id="screen-ob4">
+    <div class="onboard-header">
+      <div class="step-track"><span class="done"></span><span class="done"></span><span class="done"></span><span class="done"></span></div>
+      <div class="step-label">Step 4 of 4</div>
+      <h2 class="step-title">Add a farm photo</h2>
+      <p class="step-desc">Profiles with a real photo get more buyer interest.</p>
+    </div>
+    <div class="screen-body no-pad-bottom" style="padding-top:0;">
+      <div class="upload-box" onclick="triggerOnboardPhotoPicker()">
+        <svg class="icon" style="width:26px;height:26px" viewBox="0 0 24 24" fill="none"><path d="M4 8a2 2 0 012-2h1.2l.8-1.5A1.5 1.5 0 019.3 3.7h5.4a1.5 1.5 0 011.3.8L16.8 6H18a2 2 0 012 2v9a2 2 0 01-2 2H6a2 2 0 01-2-2V8z" stroke="#1A1A1A" stroke-width="1.6"/><circle cx="12" cy="13" r="3.3" stroke="#1A1A1A" stroke-width="1.6"/></svg>
+        <div class="upload-title">Tap to add photo</div>
+        <div class="upload-sub">JPG or PNG, up to 10MB</div>
+      </div>
+      <input type="file" accept="image/*" capture="environment" id="obPhotoInput" style="display:none" onchange="handleOnboardPhotoFile(event)" />
+      <div class="photo-thumb-row" id="obPhotoRow"></div>
+    </div>
+    <div class="onboard-nav">
+      <button class="btn btn-ghost" onclick="goToScreen('screen-ob3')" style="max-width:56px;">
+        <svg class="icon" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="#1A1A1A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <button class="btn btn-primary" onclick="finishOnboarding()">Finish setup</button>
+    </div>
+  </div>
+
+  <!-- ================= HOME ================= -->
+  <div class="screen" id="screen-home">
+    <div class="top-header">
+      <p class="eyebrow" id="homeGreeting">Habari, Juma 👋</p>
+      <h1>Your farm feed</h1>
+      <div class="sub-loc">
+        <svg class="icon" style="width:14px;height:14px" viewBox="0 0 24 24" fill="none"><path d="M12 21s7-6.5 7-12a7 7 0 10-14 0c0 5.5 7 12 7 12z" stroke="#6B6B6B" stroke-width="1.6"/><circle cx="12" cy="9" r="2.3" stroke="#6B6B6B" stroke-width="1.6"/></svg>
+        <span id="homeLoc">Maji ya Chai, Arusha</span>
+      </div>
+    </div>
+    <div class="screen-body" style="padding-top:6px;">
+      <div class="stat-row">
+        <div class="stat-card"><div class="stat-num" id="statActive">0</div><div class="stat-label">Active listings</div></div>
+        <div class="stat-card"><div class="stat-num" id="statSold">0</div><div class="stat-label">Sold this season</div></div>
+        <div class="stat-card"><div class="stat-num">92%</div><div class="stat-label">Profile score</div></div>
+      </div>
+
+      <div class="section-heading">
+        <h3>Buying opportunities near you</h3>
+        <span class="see-all" onclick="goToScreen('screen-requests')">See all</span>
+      </div>
+      <div id="homeRequestsWrap" style="margin-bottom:22px;"></div>
+
+      <div class="add-cta" onclick="goToScreen('screen-add')">
+        <div class="txt"><strong>Add new listing</strong><span>List a crop for wholesale buyers</span></div>
+        <div class="plus-circle"><svg class="icon" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="#1A1A1A" stroke-width="2.4" stroke-linecap="round"/></svg></div>
+      </div>
+
+      <div class="section-heading">
+        <h3>Your listings</h3>
+        <span class="see-all" onclick="goToScreen('screen-listings')">See all</span>
+      </div>
+      <div id="homeListingsWrap"></div>
+    </div>
+    <div class="bottom-nav" id="navHome"></div>
+  </div>
+
+  <!-- ================= ADD LISTING ================= -->
+  <div class="screen" id="screen-add">
+    <div class="sub-header">
+      <div class="back-circle" onclick="goToScreen('screen-home')">
+        <svg class="icon" style="width:16px;height:16px" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="#1A1A1A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <h2>New crop listing</h2>
+    </div>
+    <div class="screen-body" style="padding-top:12px;">
+      <div class="field">
+        <label>Crop</label>
+        <select id="addCrop">
+          <option>Maize</option><option>Beans</option><option>Tomatoes</option><option>Onions</option>
+          <option>Bananas</option><option>Coffee</option><option>Avocado</option><option>Rice</option>
+          <option>Cassava</option><option>Sunflower</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Variety (optional)</label>
+        <input type="text" id="addVariety" placeholder="e.g. Hybrid H614" />
+      </div>
+      <div class="input-row">
+        <div class="field">
+          <label>Quantity available</label>
+          <input type="number" id="addQty" placeholder="e.g. 500" />
+        </div>
+        <div class="field">
+          <label>Unit</label>
+          <select id="addUnit"><option>kg</option><option>tons</option><option>crates</option><option>bags (100kg)</option></select>
+        </div>
+      </div>
+      <div class="field">
+        <label>Quality grade</label>
+        <div class="chip-group" id="gradeChips">
+          <div class="chip" data-grade="Grade A">Grade A</div>
+          <div class="chip" data-grade="Grade B">Grade B</div>
+          <div class="chip" data-grade="Mixed">Mixed</div>
+        </div>
+      </div>
+      <div class="input-row">
+        <div class="field">
+          <label>Price expectation</label>
+          <input type="number" id="addPrice" placeholder="e.g. 800" />
+        </div>
+        <div class="field">
+          <label>Per</label>
+          <select id="addPriceUnit"><option>kg</option><option>ton</option><option>crate</option><option>bag</option></select>
+        </div>
+      </div>
+      <div class="field">
+        <label>Expected / actual harvest date</label>
+        <input type="date" id="addHarvestDate" />
+      </div>
+      <div class="field">
+        <label>Photos</label>
+        <div class="upload-box" onclick="triggerAddPhotoPicker()">
+          <svg class="icon" style="width:24px;height:24px" viewBox="0 0 24 24" fill="none"><path d="M4 8a2 2 0 012-2h1.2l.8-1.5A1.5 1.5 0 019.3 3.7h5.4a1.5 1.5 0 011.3.8L16.8 6H18a2 2 0 012 2v9a2 2 0 01-2 2H6a2 2 0 01-2-2V8z" stroke="#1A1A1A" stroke-width="1.6"/><circle cx="12" cy="13" r="3.3" stroke="#1A1A1A" stroke-width="1.6"/></svg>
+          <div class="upload-title">Add photos of the crop</div>
+          <div class="upload-sub">Listings with photos sell 3x faster, up to 4</div>
+        </div>
+        <input type="file" accept="image/*" capture="environment" multiple id="addPhotoInput" style="display:none" onchange="handleAddListingPhotoFiles(event)" />
+        <div class="photo-thumb-row" id="addPhotoRow"></div>
+      </div>
+      <div class="field">
+        <label>Notes for buyers (optional)</label>
+        <textarea id="addNotes" placeholder="e.g. Available for pickup, flexible on quantity"></textarea>
+      </div>
+      <button class="btn btn-primary" onclick="publishListing()" style="margin-top:6px;">Publish listing</button>
+    </div>
+  </div>
+
+  <!-- ================= LISTINGS ================= -->
+  <div class="screen" id="screen-listings">
+    <div class="sub-header">
+      <div class="back-circle" onclick="goToScreen('screen-home')">
+        <svg class="icon" style="width:16px;height:16px" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="#1A1A1A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <h2>My listings</h2>
+    </div>
+    <div class="filter-row" id="listingFilters">
+      <div class="filter-pill active" data-filter="All">All</div>
+      <div class="filter-pill" data-filter="Available">Available</div>
+      <div class="filter-pill" data-filter="Reserved">Reserved</div>
+      <div class="filter-pill" data-filter="Sold">Sold</div>
+    </div>
+    <div class="screen-body" style="padding-top:10px;">
+      <div id="allListingsWrap"></div>
+    </div>
+    <div class="bottom-nav" id="navListings"></div>
+  </div>
+
+  <!-- ================= LISTING DETAIL ================= -->
+  <div class="screen" id="screen-detail">
+    <div class="detail-hero">
+      <div class="back-circle" style="position:absolute; top:16px; left:16px; background:rgba(255,255,255,.9);" onclick="goToScreen('screen-listings')">
+        <svg class="icon" style="width:16px;height:16px" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="#1A1A1A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <span class="badge available" id="detailBadge">Available</span>
+    </div>
+    <div class="detail-body">
+      <h2 class="detail-title" id="detailTitle">Maize &middot; Grade A</h2>
+      <p class="detail-farmer" id="detailFarmer">Listed by Juma Mwakalinga &middot; Maji ya Chai, Arusha</p>
+      <div class="detail-grid">
+        <div class="detail-stat"><div class="lbl">Quantity</div><div class="val" id="detailQty">500 kg</div></div>
+        <div class="detail-stat"><div class="lbl">Price</div><div class="val" id="detailPrice">TZS 800/kg</div></div>
+        <div class="detail-stat"><div class="lbl">Harvest date</div><div class="val" id="detailDate">12 Oct 2026</div></div>
+        <div class="detail-stat"><div class="lbl">Variety</div><div class="val" id="detailVariety">Hybrid H614</div></div>
+      </div>
+
+      <div class="section-heading"><h3 id="detailInterestHeading">Buyer interest (0)</h3></div>
+      <div id="detailInterestWrap" style="margin-bottom:20px;"></div>
+
+      <div class="detail-actions">
+        <button class="btn btn-ghost" onclick="markListingSold()">Mark as sold</button>
+        <button class="btn btn-primary" onclick="deleteCurrentListing()">Remove</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= BUYING REQUESTS ================= -->
+  <div class="screen" id="screen-requests">
+    <div class="top-header">
+      <p class="eyebrow">Wholesale buyers are sourcing</p>
+      <h1>Buying requests</h1>
+    </div>
+    <div style="display:flex; align-items:center; justify-content:space-between; padding:0 20px 12px 20px; gap:10px;">
+      <span id="reqScopeLabel" style="font-size:12px; color:var(--slate); font-weight:600; line-height:1.4;">Showing requests for your crops</span>
+      <button class="btn btn-ghost btn-sm" id="reqScopeToggleBtn" onclick="toggleRequestScope()" style="width:auto; flex-shrink:0;">Show all crops</button>
+    </div>
+    <div class="filter-row" id="requestFilters">
+      <div class="filter-pill active" data-filter="All">All</div>
+      <div class="filter-pill" data-filter="Open">Open</div>
+      <div class="filter-pill" data-filter="Responded">Responded</div>
+    </div>
+    <div class="sort-row">
+      <div class="view-toggle" id="reqSortToggle">
+        <div class="view-toggle-btn active" data-sort="newest" onclick="setRequestsSort('newest')">Newest</div>
+        <div class="view-toggle-btn" data-sort="nearest" onclick="setRequestsSort('nearest')">Nearest</div>
+      </div>
+      <div class="view-toggle" id="reqViewToggle">
+        <div class="view-toggle-btn active" data-view="list" onclick="setRequestsView('list')">List</div>
+        <div class="view-toggle-btn" data-view="map" onclick="setRequestsView('map')">Map</div>
+      </div>
+    </div>
+    <div class="map-view" id="requestsMapView" style="display:none;"></div>
+    <div class="screen-body" style="padding-top:10px;">
+      <div id="allRequestsWrap"></div>
+    </div>
+    <div class="bottom-nav" id="navRequests"></div>
+  </div>
+
+  <!-- ================= REQUEST DETAIL / RESPOND ================= -->
+  <div class="screen" id="screen-request-detail">
+    <div class="sub-header">
+      <div class="back-circle" onclick="goToScreen('screen-requests')">
+        <svg class="icon" style="width:16px;height:16px" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="#1A1A1A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <h2 id="reqDetailTitle">Potatoes needed</h2>
+    </div>
+    <div class="screen-body" style="padding-top:8px;">
+      <p class="buyer-tag" id="reqDetailBuyer">Posted by Arusha Wholesale Ltd</p>
+
+      <div class="detail-grid" style="margin-top:14px;">
+        <div class="detail-stat"><div class="lbl">Quantity needed</div><div class="val" id="reqDetailQty">10,000 kg</div></div>
+        <div class="detail-stat"><div class="lbl">Quality required</div><div class="val" id="reqDetailQuality">Grade A</div></div>
+        <div class="detail-stat"><div class="lbl">Delivery location</div><div class="val" id="reqDetailLocation">Arusha</div></div>
+        <div class="detail-stat"><div class="lbl">Needed by</div><div class="val" id="reqDetailDate">15 Sep 2026</div></div>
+      </div>
+
+      <div class="card" style="padding:14px 16px; margin-bottom:20px;">
+        <div class="lbl" style="font-size:11.5px;color:var(--slate);font-weight:600;margin-bottom:2px;">Target price</div>
+        <div style="font-family:'Poppins',sans-serif;font-weight:700;font-size:16px;" id="reqDetailPrice">TZS 1,200/kg</div>
+        <div class="progress-track"><div class="progress-fill" id="reqDetailProgressFill" style="width:70%;"></div></div>
+        <div class="progress-label" id="reqDetailProgressLabel">7,000 / 10,000 kg secured from other farmers</div>
+      </div>
+
+      <div id="reqDetailOfferSummary"></div>
+
+      <div id="reqDetailForm">
+        <div class="section-heading"><h3>Your offer</h3></div>
+        <div class="input-row">
+          <div class="field">
+            <label>Quantity you can supply</label>
+            <input type="number" id="reqOfferQty" placeholder="e.g. 800" />
+          </div>
+          <div class="field">
+            <label>Unit</label>
+            <select id="reqOfferUnit"><option>kg</option><option>tons</option><option>bags (100kg)</option></select>
+          </div>
+        </div>
+        <div class="input-row">
+          <div class="field">
+            <label>Your price</label>
+            <input type="number" id="reqOfferPrice" placeholder="e.g. 1050" />
+          </div>
+          <div class="field">
+            <label>Ready by</label>
+            <input type="date" id="reqOfferDate" />
+          </div>
+        </div>
+        <button class="btn btn-primary" id="reqOfferSubmitBtn" onclick="submitOffer()">Submit offer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= PROFILE ================= -->
+  <div class="screen" id="screen-profile">
+    <div class="top-header">
+      <p class="eyebrow">Your profile</p>
+      <h1>Profile &amp; farm data</h1>
+    </div>
+    <div class="screen-body" style="padding-top:6px;">
+      <div class="profile-head">
+        <div class="avatar" id="profileAvatar">
+          <img id="profileAvatarImg" class="avatar-img" alt="" />
+          <span id="profileInitialText">J</span>
+        </div>
+        <div>
+          <div class="profile-name" id="profileName">Juma Mwakalinga</div>
+          <div class="profile-loc" id="profileLoc">
+            <svg class="icon" style="width:13px;height:13px" viewBox="0 0 24 24" fill="none"><path d="M12 21s7-6.5 7-12a7 7 0 10-14 0c0 5.5 7 12 7 12z" stroke="#6B6B6B" stroke-width="1.6"/></svg>
+            Maji ya Chai, Arusha
+          </div>
+          <div class="verify-badge">
+            <svg class="icon" style="width:12px;height:12px" viewBox="0 0 24 24" fill="none"><path d="M20 6L9 17l-5-5" stroke="#2E7D46" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Phone verified
+          </div>
+        </div>
+      </div>
+
+      <div class="section-heading"><h3>Farm details</h3></div>
+      <div class="card" style="padding:6px 16px; margin-bottom:20px;">
+        <div class="info-row"><span class="lbl">Farm size</span><span class="val" id="pfFarmSize">3.5 acres</span></div>
+        <div class="info-row"><span class="lbl">Years farming</span><span class="val" id="pfYears">8 years</span></div>
+        <div class="info-row"><span class="lbl">Crops grown</span><span class="val" id="pfCrops">Maize, Tomatoes</span></div>
+        <div class="info-row"><span class="lbl">Certifications</span><span class="val" id="pfCerts">None yet</span></div>
+      </div>
+
+      <div class="section-heading"><h3>Track record</h3></div>
+      <div class="stat-row" style="margin-bottom:22px;">
+        <div class="stat-card"><div class="stat-num" id="pfTotalListed">0</div><div class="stat-label">Total listings</div></div>
+        <div class="stat-card"><div class="stat-num" id="pfTotalSold">0</div><div class="stat-label">Completed sales</div></div>
+      </div>
+
+      <button class="btn btn-ghost" onclick="goToScreen('screen-edit-profile')">Edit farm data</button>
+      <p style="text-align:center; margin-top:16px; font-size:13px; color:var(--red); font-weight:700; cursor:pointer;" onclick="handleLogout()">Log out</p>
+    </div>
+    <div class="bottom-nav" id="navProfile"></div>
+  </div>
+
+  <!-- ================= EDIT PROFILE ================= -->
+  <div class="screen" id="screen-edit-profile">
+    <div class="sub-header">
+      <div class="back-circle" onclick="goToScreen('screen-profile')">
+        <svg class="icon" style="width:16px;height:16px" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="#1A1A1A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <h2>Edit farm data</h2>
+    </div>
+    <div class="screen-body" style="padding-top:12px;">
+      <div class="field">
+        <label>Full name</label>
+        <input type="text" id="edName" placeholder="e.g. Juma Mwakalinga" />
+      </div>
+      <div class="field">
+        <label>Phone number</label>
+        <input type="tel" id="edPhone" placeholder="+255 7XX XXX XXX" />
+      </div>
+      <div class="field">
+        <label>Farm / business name (optional)</label>
+        <input type="text" id="edFarmName" placeholder="e.g. Mwakalinga Family Farm" />
+      </div>
+      <div class="field">
+        <label>Years farming</label>
+        <input type="number" id="edYears" placeholder="e.g. 8" />
+      </div>
+      <div class="input-row">
+        <div class="field">
+          <label>Region</label>
+          <select id="edRegion">
+            <option>Arusha</option><option>Kilimanjaro</option><option>Manyara</option>
+            <option>Dodoma</option><option>Mbeya</option><option>Iringa</option><option>Morogoro</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>District</label>
+          <input type="text" id="edDistrict" placeholder="e.g. Arumeru" />
+        </div>
+      </div>
+      <div class="field">
+        <label>Village / ward</label>
+        <input type="text" id="edVillage" placeholder="e.g. Maji ya Chai" />
+      </div>
+      <div class="field">
+        <label>Farm location on map</label>
+        <div class="location-map" id="edLocationMap"></div>
+        <div class="locate-status" id="edLocateStatus">Tap the map or drag the pin to update your location</div>
+      </div>
+      <div class="input-row">
+        <div class="field">
+          <label>Farm size</label>
+          <input type="number" id="edFarmSize" placeholder="e.g. 3.5" />
+        </div>
+        <div class="field">
+          <label>Unit</label>
+          <select id="edFarmUnit"><option>Acres</option><option>Hectares</option></select>
+        </div>
+      </div>
+      <div class="field">
+        <label>Crops you grow</label>
+        <div class="chip-group" id="edCropChips">
+          <div class="chip" data-crop="Maize">Maize</div>
+          <div class="chip" data-crop="Beans">Beans</div>
+          <div class="chip" data-crop="Tomatoes">Tomatoes</div>
+          <div class="chip" data-crop="Onions">Onions</div>
+          <div class="chip" data-crop="Bananas">Bananas</div>
+          <div class="chip" data-crop="Coffee">Coffee</div>
+          <div class="chip" data-crop="Avocado">Avocado</div>
+          <div class="chip" data-crop="Rice">Rice</div>
+          <div class="chip" data-crop="Cassava">Cassava</div>
+          <div class="chip" data-crop="Sunflower">Sunflower</div>
+        </div>
+        <div class="hint">This decides which buying requests you see by default.</div>
+      </div>
+      <div class="field">
+        <label>Certifications (optional)</label>
+        <div class="chip-group" id="edCertChips">
+          <div class="chip" data-cert="Organic">Organic</div>
+          <div class="chip" data-cert="GlobalG.A.P">GlobalG.A.P</div>
+          <div class="chip" data-cert="Fair Trade">Fair Trade</div>
+          <div class="chip" data-cert="None">None yet</div>
+        </div>
+      </div>
+      <button class="btn btn-primary" onclick="saveProfileEdits()" style="margin-top:6px;">Save changes</button>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+</div>
+
+<script>
+/* ===================== SUPABASE ===================== */
+const SUPABASE_URL = 'https://xznyqhikkpojzhspokfa.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_w3sdCnlk3FHPPJ4a5EwsIw_sUUHNKf5';
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, { db: { schema: 'marketplace' } });
+let authMode = 'signup';
+
+/* ===================== STATE ===================== */
+const state = {
+  currentScreen: 'screen-login',
+  farmer: { name:'', phone:'', farmName:'', years:'', region:'Arusha', district:'', village:'', farmSize:'', farmUnit:'Acres', crops:[], certs:[], photoUrl:null, latitude:null, longitude:null },
+  listings: [],
+  activeFilter: 'All',
+  currentDetailId: null,
+  requestFilter: 'All',
+  requestShowAll: false,
+  requestSort: 'newest',
+  requestsView: 'list',
+  currentRequestId: null,
+  buyingRequests: [],
+  incomingPurchaseRequests: []
+};
+
+/* ===================== GEO ===================== */
+function haversineKm(lat1, lon1, lat2, lon2){
+  if(lat1 == null || lon1 == null || lat2 == null || lon2 == null) return null;
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) * Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function distanceLabel(km){
+  if(km == null) return '';
+  return km < 1 ? `${Math.round(km * 1000)} m away` : `${km.toFixed(1)} km away`;
+}
+
+/* ===================== PHOTOS (Supabase Storage) ===================== */
+// Resizes/re-encodes an image client-side before upload, since farmers are often
+// on slow mobile data and phone cameras produce multi-MB originals.
+function compressImage(file, maxDim = 1280, quality = 0.82){
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Could not read photo'));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('Could not read photo'));
+      img.onload = () => {
+        let { width, height } = img;
+        if(width > maxDim || height > maxDim){
+          const scale = maxDim / Math.max(width, height);
+          width = Math.round(width * scale);
+          height = Math.round(height * scale);
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width; canvas.height = height;
+        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+        canvas.toBlob(blob => {
+          if(!blob){ reject(new Error('Could not process photo')); return; }
+          resolve(blob);
+        }, 'image/jpeg', quality);
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+// kind: 'profile' (single, always overwrites the same file) or 'listings'/'requests'
+// (multiple, unique filenames). Path is always {ownerId}/... so the storage RLS
+// policy (own-folder write, public read) matches without any extra wiring.
+async function uploadPhoto(file, kind){
+  const { data: { user } } = await sb.auth.getUser();
+  if(!user) throw new Error('Session expired, please sign in again');
+  const blob = await compressImage(file);
+  const path = kind === 'profile'
+    ? `${user.id}/profile.jpg`
+    : `${user.id}/${kind}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.jpg`;
+  const { error } = await sb.storage.from('shambani-photos').upload(path, blob, { contentType: 'image/jpeg', upsert: true });
+  if(error) throw new Error(error.message);
+  const { data } = sb.storage.from('shambani-photos').getPublicUrl(path);
+  return `${data.publicUrl}?v=${Date.now()}`;
+}
+
+function photoThumbHtml(url, onRemove){
+  return `<div class="photo-thumb"><img src="${url}" alt="" />
+    <div class="x" onclick="${onRemove}"><svg class="icon" style="width:11px;height:11px" viewBox="0 0 24 24" fill="none"><path d="M6 6l12 12M18 6L6 18" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/></svg></div>
+  </div>`;
+}
+
+let leafletLoadPromise = null;
+function loadLeaflet(){
+  if(window.L) return Promise.resolve();
+  if(leafletLoadPromise) return leafletLoadPromise;
+  leafletLoadPromise = new Promise((resolve, reject) => {
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+    document.head.appendChild(link);
+    const script = document.createElement('script');
+    script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+    script.onload = () => resolve();
+    script.onerror = () => { leafletLoadPromise = null; reject(new Error('Could not load map library')); };
+    document.head.appendChild(script);
+  });
+  return leafletLoadPromise;
+}
+
+const geoPickers = {};
+async function initLocationPicker(mapDivId, statusElId, lat, lng, onChange){
+  if(geoPickers[mapDivId]){
+    geoPickers[mapDivId].map.invalidateSize();
+    return geoPickers[mapDivId];
+  }
+  try { await loadLeaflet(); } catch(e){ showToast('Could not load the map. Check your connection.'); return null; }
+  const startLat = lat || -3.3869, startLng = lng || 36.6830;
+  const map = L.map(mapDivId, { zoomControl: false }).setView([startLat, startLng], lat ? 14 : 12);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '\u00a9 OpenStreetMap', maxZoom: 18
+  }).addTo(map);
+  const marker = L.marker([startLat, startLng], { draggable: true }).addTo(map);
+  const setStatus = (msg) => { const el = document.getElementById(statusElId); if(el) el.textContent = msg; };
+  marker.on('dragend', () => {
+    const p = marker.getLatLng();
+    onChange(p.lat, p.lng);
+    setStatus(`Pin set at ${p.lat.toFixed(4)}, ${p.lng.toFixed(4)}`);
+  });
+  map.on('click', (e) => {
+    marker.setLatLng(e.latlng);
+    onChange(e.latlng.lat, e.latlng.lng);
+    setStatus(`Pin set at ${e.latlng.lat.toFixed(4)}, ${e.latlng.lng.toFixed(4)}`);
+  });
+  if(!lat && navigator.geolocation){
+    setStatus('Finding your location\u2026');
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        const { latitude, longitude } = pos.coords;
+        map.setView([latitude, longitude], 15);
+        marker.setLatLng([latitude, longitude]);
+        onChange(latitude, longitude);
+        setStatus(`Pin set at ${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
+      },
+      () => setStatus('Tap the map or drag the pin to set your location'),
+      { timeout: 8000 }
+    );
+  }
+  geoPickers[mapDivId] = { map, marker };
+  return geoPickers[mapDivId];
+}
+
+async function loadBuyingRequests(){
+  const { data: { user } } = await sb.auth.getUser();
+  if(!user) return;
+
+  const { data: requestRows, error: reqErr } = await sb.from('buying_requests').select('*').order('created_at', { ascending: false });
+  if(reqErr){ showToast('Could not load buying requests'); return; }
+
+  const ids = (requestRows || []).map(r => r.id);
+  const progressMap = {};
+  if(ids.length){
+    const { data: progressRows } = await sb.from('buying_request_progress').select('*').in('buying_request_id', ids);
+    (progressRows || []).forEach(p => { progressMap[p.buying_request_id] = p.matched_qty || 0; });
+  }
+
+  const { data: myOfferRows } = await sb.from('offers').select('*').eq('farmer_id', user.id);
+  const myOfferMap = {};
+  (myOfferRows || []).forEach(o => {
+    if(o.status === 'Pending' || o.status === 'Accepted'){
+      myOfferMap[o.buying_request_id] = { id: o.id, qty: o.quantity, unit: o.unit, price: o.price, date: o.ready_date, status: o.status, deliveryMethod: o.delivery_method };
+    }
+  });
+
+  state.buyingRequests = (requestRows || []).map(row => ({
+    id: row.id,
+    crop: row.crop,
+    quality: row.quality,
+    quantity: row.quantity,
+    unit: row.unit,
+    location: row.region,
+    deliveryDate: row.delivery_date,
+    targetPrice: row.target_price,
+    priceUnit: row.price_unit,
+    buyer: row.buyer_business,
+    buyerPhone: row.buyer_phone,
+    photoUrl: row.photo_url || null,
+    latitude: row.latitude,
+    longitude: row.longitude,
+    matchedQty: progressMap[row.id] || 0,
+    myOffer: myOfferMap[row.id] || null
+  }));
+}
+
+/* ===================== NAV / SCREENS ===================== */
+async function goToScreen(id){
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  document.getElementById(id).scrollTop = 0;
+  state.currentScreen = id;
+  if(id === 'screen-home'){ await loadListings(); await loadBuyingRequests(); renderHome(); }
+  if(id === 'screen-listings'){ await loadListings(); renderListings(); }
+  if(id === 'screen-profile') renderProfile();
+  if(id === 'screen-requests'){ await loadBuyingRequests(); renderRequests(); }
+  if(id === 'screen-edit-profile'){ populateEditForm(); setTimeout(() => initLocationPicker('edLocationMap', 'edLocateStatus', state.farmer.latitude, state.farmer.longitude, (lat,lng) => { state.farmer.latitude = lat; state.farmer.longitude = lng; }), 50); }
+  if(id === 'screen-ob2'){ setTimeout(() => initLocationPicker('obLocationMap', 'obLocateStatus', state.farmer.latitude, state.farmer.longitude, (lat,lng) => { state.farmer.latitude = lat; state.farmer.longitude = lng; }), 50); }
+  setActiveNav(id);
+}
+
+function navIconSet(activeId){
+  const items = [
+    { id:'screen-home', label:'Home', icon:`<path d="M4 11l8-7 8 7v8a1 1 0 01-1 1h-4v-6H9v6H5a1 1 0 01-1-1v-8z"/>` },
+    { id:'screen-requests', label:'Requests', icon:`<path d="M5 4h14v12H8l-3 3V4z"/>` },
+    { id:'__add__', label:'Add', icon:`<path d="M12 5v14M5 12h14" stroke-width="2.4" stroke-linecap="round"/>`, fab:true },
+    { id:'screen-listings', label:'Listings', icon:`<rect x="4" y="5" width="16" height="4" rx="1"/><rect x="4" y="11" width="16" height="4" rx="1"/><rect x="4" y="17" width="10" height="3" rx="1"/>` },
+    { id:'screen-profile', label:'Profile', icon:`<circle cx="12" cy="8" r="3.4"/><path d="M5 20c0-3.6 3.1-6 7-6s7 2.4 7 6"/>` }
+  ];
+  return items.map(it => {
+    if(it.fab){
+      return `<div class="nav-item" onclick="goToScreen('screen-add')">
+        <div class="nav-fab"><svg class="icon" style="width:20px;height:20px" viewBox="0 0 24 24" fill="none" stroke="#1A1A1A">${it.icon}</svg></div>
+      </div>`;
+    }
+    const active = it.id === activeId;
+    return `<div class="nav-item ${active?'active':''}" onclick="goToScreen('${it.id}')">
+      <svg class="icon" viewBox="0 0 24 24" fill="${active?'#1A1A1A':'#B7B4A9'}" stroke="${active?'#1A1A1A':'#B7B4A9'}" stroke-width="1.3">${it.icon}</svg>
+      <span>${it.label}</span>
+    </div>`;
+  }).join('');
+}
+function setActiveNav(activeId){
+  ['navHome','navRequests','navListings','navProfile'].forEach(navId => {
+    const el = document.getElementById(navId);
+    if(el) el.innerHTML = navIconSet(activeId);
+  });
+}
+
+/* ===================== TOAST ===================== */
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(()=> t.classList.remove('show'), 2200);
+}
+
+function waLink(phone, text){
+  const digits = (phone || '').replace(/[^\d]/g, '');
+  return `https://wa.me/${digits}?text=${encodeURIComponent(text || '')}`;
+}
+
+function deliveryChipsHtml(current, fnName, idValue){
+  const options = ['Pickup', 'Farmer delivers', 'To arrange'];
+  return `<div class="delivery-chips">${options.map(opt =>
+    `<div class="delivery-chip ${current === opt ? 'selected' : ''}" onclick="${fnName}('${idValue}','${opt}')">${opt}</div>`
+  ).join('')}</div>`;
+}
+
+/* ===================== AUTH ===================== */
+function togglePasswordVisibility(inputId, btnId){
+  const input = document.getElementById(inputId);
+  const btn = document.getElementById(btnId);
+  const showing = input.type === 'text';
+  input.type = showing ? 'password' : 'text';
+  btn.setAttribute('aria-label', showing ? 'Show password' : 'Hide password');
+  btn.querySelector('svg').innerHTML = showing
+    ? '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" stroke="#9A968A" stroke-width="1.6"/><circle cx="12" cy="12" r="3" stroke="#9A968A" stroke-width="1.6"/>'
+    : '<path d="M3 3l18 18" stroke="#9A968A" stroke-width="1.6" stroke-linecap="round"/><path d="M10.6 5.2A10.6 10.6 0 0112 5c6.5 0 10 7 10 7a17.6 17.6 0 01-3.2 4.1M6.5 6.7C3.8 8.4 2 12 2 12s3.5 7 10 7c1.4 0 2.7-.3 3.8-.8" stroke="#9A968A" stroke-width="1.6" stroke-linecap="round"/><path d="M9.9 9.9a3 3 0 004.2 4.2" stroke="#9A968A" stroke-width="1.6" stroke-linecap="round"/>';
+}
+
+function toggleAuthMode(){
+  authMode = authMode === 'signup' ? 'login' : 'signup';
+  document.getElementById('authError').style.display = 'none';
+  if(authMode === 'signup'){
+    document.getElementById('authTitle').textContent = 'Karibu Shambani';
+    document.getElementById('authSub').textContent = "List your harvest, reach verified wholesale buyers, and get fair prices, straight from your phone.";
+    document.getElementById('authSubmitBtn').textContent = 'Create account';
+    document.getElementById('authToggleText').textContent = 'Already have an account?';
+    document.getElementById('authToggleLink').textContent = 'Sign in';
+  } else {
+    document.getElementById('authTitle').textContent = 'Welcome back';
+    document.getElementById('authSub').textContent = 'Sign in to manage your listings and buyer requests.';
+    document.getElementById('authSubmitBtn').textContent = 'Sign in';
+    document.getElementById('authToggleText').textContent = 'New here?';
+    document.getElementById('authToggleLink').textContent = 'Create an account';
+  }
+}
+
+function showAuthError(msg){
+  const el = document.getElementById('authError');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+async function handleAuthSubmit(){
+  const email = document.getElementById('authEmail').value.trim();
+  const password = document.getElementById('authPassword').value;
+  document.getElementById('authError').style.display = 'none';
+  if(!email || !password){ showAuthError('Enter your email and password'); return; }
+
+  const btn = document.getElementById('authSubmitBtn');
+  btn.disabled = true;
+
+  if(authMode === 'signup'){
+    const { data, error } = await sb.auth.signUp({ email, password });
+    btn.disabled = false;
+    if(error){ showAuthError(error.message); return; }
+    if(!data.session){
+      showToast('Check your email to confirm your account, then sign in');
+      toggleAuthMode();
+      return;
+    }
+    goToScreen('screen-ob1');
+  } else {
+    const { data, error } = await sb.auth.signInWithPassword({ email, password });
+    btn.disabled = false;
+    if(error){ showAuthError(error.message); return; }
+    await loadFarmerAndEnter();
+  }
+}
+
+async function handleLogout(){
+  await sb.auth.signOut();
+  teardownRealtime();
+  state.farmer = { name:'', farmName:'', years:'', region:'Arusha', district:'', village:'', farmSize:'', farmUnit:'Acres', crops:[], certs:[], photoUrl:null };
+  state.listings = [];
+  document.getElementById('authEmail').value = '';
+  document.getElementById('authPassword').value = '';
+  goToScreen('screen-login');
+}
+
+/* ===================== DATA MAPPING (DB row <-> app state) ===================== */
+function farmerRowToState(row){
+  return {
+    name: row.name || '',
+    phone: row.phone || '',
+    farmName: row.farm_name || '',
+    years: row.years_farming != null ? String(row.years_farming) : '',
+    region: row.region || 'Arusha',
+    district: row.district || '',
+    village: row.village || '',
+    farmSize: row.farm_size != null ? String(row.farm_size) : '',
+    farmUnit: row.farm_unit || 'Acres',
+    crops: row.crops || [],
+    certs: row.certifications || [],
+    photoUrl: row.photo_url || null,
+    latitude: row.latitude,
+    longitude: row.longitude
+  };
+}
+
+function listingRowToState(row){
+  return {
+    id: row.id,
+    crop: row.crop,
+    variety: row.variety || '',
+    qty: row.quantity,
+    unit: row.unit,
+    grade: row.grade || 'Grade A',
+    price: row.price,
+    priceUnit: row.price_unit,
+    harvestDate: row.harvest_date || '',
+    photoUrls: row.photo_urls || [],
+    notes: row.notes || '',
+    status: row.status,
+    createdAt: row.created_at
+  };
+}
+
+async function loadFarmerAndEnter(){
+  const { data: { user } } = await sb.auth.getUser();
+  if(!user){ goToScreen('screen-login'); return; }
+
+  const { data: farmerRow, error: farmerErr } = await sb.from('farmers').select('*').eq('id', user.id).maybeSingle();
+  if(farmerErr){ showToast('Could not load your profile'); goToScreen('screen-login'); return; }
+
+  if(!farmerRow){
+    goToScreen('screen-ob1');
+    return;
+  }
+
+  state.farmer = farmerRowToState(farmerRow);
+  setupRealtime();
+  goToScreen('screen-home');
+}
+
+/* ===================== REALTIME ===================== */
+function debounce(fn, wait){
+  let t;
+  return (...args) => {
+    clearTimeout(t);
+    t = setTimeout(() => fn(...args), wait);
+  };
+}
+
+let realtimeReady = false;
+function setupRealtime(){
+  if(realtimeReady) return;
+  realtimeReady = true;
+
+  const refreshPurchaseRequests = debounce(async () => {
+    await loadListings();
+    refreshAfterRealtime();
+  }, 400);
+  const refreshBuyingRequests = debounce(async () => {
+    await loadBuyingRequests();
+    refreshAfterRealtime();
+  }, 400);
+
+  sb.channel('rt-purchase-requests')
+    .on('postgres_changes', { event: '*', schema: 'marketplace', table: 'purchase_requests' }, refreshPurchaseRequests)
+    .subscribe();
+
+  sb.channel('rt-offers')
+    .on('postgres_changes', { event: '*', schema: 'marketplace', table: 'offers' }, refreshBuyingRequests)
+    .subscribe();
+
+  sb.channel('rt-buying-requests')
+    .on('postgres_changes', { event: '*', schema: 'marketplace', table: 'buying_requests' }, refreshBuyingRequests)
+    .subscribe();
+}
+
+function teardownRealtime(){
+  sb.removeAllChannels();
+  realtimeReady = false;
+}
+
+function refreshAfterRealtime(){
+  const s = state.currentScreen;
+  if(s === 'screen-home') renderHome();
+  else if(s === 'screen-listings') renderListings();
+  else if(s === 'screen-requests') renderRequests();
+  else if(s === 'screen-detail' && state.currentDetailId){
+    if(state.listings.find(l => l.id === state.currentDetailId)) openDetail(state.currentDetailId);
+  } else if(s === 'screen-request-detail' && state.currentRequestId){
+    if(state.buyingRequests.find(r => r.id === state.currentRequestId)) openRequestDetail(state.currentRequestId);
+  }
+}
+
+async function loadListings(){
+  const { data: { user } } = await sb.auth.getUser();
+  if(!user) return;
+  const { data, error } = await sb.from('listings').select('*').eq('farmer_id', user.id).order('created_at', { ascending: false });
+  if(error){ showToast('Could not load listings'); return; }
+  state.listings = (data || []).map(listingRowToState);
+  await loadIncomingPurchaseRequests(state.listings.map(l => l.id));
+}
+
+async function loadIncomingPurchaseRequests(listingIds){
+  if(!listingIds.length){ state.incomingPurchaseRequests = []; return; }
+  const { data, error } = await sb.from('purchase_requests').select('*').in('listing_id', listingIds).order('created_at', { ascending: false });
+  if(error){ showToast('Could not load buyer interest'); return; }
+  state.incomingPurchaseRequests = (data || []).map(row => ({
+    id: row.id,
+    listingId: row.listing_id,
+    buyerBusiness: row.buyer_business,
+    buyerType: row.buyer_type,
+    buyerPhone: row.buyer_phone,
+    location: row.buyer_location,
+    qty: row.quantity,
+    unit: row.unit,
+    price: row.price,
+    priceUnit: row.price_unit,
+    sentAt: row.created_at ? row.created_at.slice(0, 10) : '',
+    status: row.status,
+    deliveryMethod: row.delivery_method
+  }));
+}
+
+async function checkSessionOnLoad(){
+  const { data: { session } } = await sb.auth.getSession();
+  if(session){
+    await loadFarmerAndEnter();
+  }
+}
+
+/* ===================== ONBOARDING interactions ===================== */
+document.getElementById('cropChips').addEventListener('click', e => {
+  const chip = e.target.closest('.chip'); if(!chip) return;
+  chip.classList.toggle('selected');
+});
+document.getElementById('certChips').addEventListener('click', e => {
+  const chip = e.target.closest('.chip'); if(!chip) return;
+  chip.classList.toggle('selected');
+});
+document.getElementById('edCropChips').addEventListener('click', e => {
+  const chip = e.target.closest('.chip'); if(!chip) return;
+  chip.classList.toggle('selected');
+});
+document.getElementById('edCertChips').addEventListener('click', e => {
+  const chip = e.target.closest('.chip'); if(!chip) return;
+  chip.classList.toggle('selected');
+});
+document.getElementById('gradeChips').addEventListener('click', e => {
+  const chip = e.target.closest('.chip'); if(!chip) return;
+  document.querySelectorAll('#gradeChips .chip').forEach(c => c.classList.remove('selected'));
+  chip.classList.add('selected');
+});
+
+let obPhotoUrl = null;
+function triggerOnboardPhotoPicker(){ document.getElementById('obPhotoInput').click(); }
+async function handleOnboardPhotoFile(e){
+  const file = e.target.files && e.target.files[0];
+  e.target.value = '';
+  if(!file) return;
+  const row = document.getElementById('obPhotoRow');
+  const tempUrl = URL.createObjectURL(file);
+  row.innerHTML = `<div class="photo-thumb" id="obPhotoTmp"><img src="${tempUrl}" alt="" style="opacity:.6" /></div>`;
+  try {
+    obPhotoUrl = await uploadPhoto(file, 'profile');
+    row.innerHTML = photoThumbHtml(obPhotoUrl, 'removeOnboardPhoto()');
+  } catch(err){
+    showToast('Could not upload photo: ' + err.message);
+    row.innerHTML = '';
+    obPhotoUrl = null;
+  }
+}
+function removeOnboardPhoto(){
+  obPhotoUrl = null;
+  document.getElementById('obPhotoRow').innerHTML = '';
+}
+
+async function finishOnboarding(){
+  const name = document.getElementById('obName').value.trim();
+  const phone = document.getElementById('obPhone').value.trim();
+  const farmName = document.getElementById('obFarmName').value.trim();
+  const years = document.getElementById('obYears').value.trim();
+  const region = document.getElementById('obRegion').value;
+  const district = document.getElementById('obDistrict').value.trim() || '-';
+  const village = document.getElementById('obVillage').value.trim() || '-';
+  const farmSize = document.getElementById('obFarmSize').value.trim();
+  const farmUnit = document.getElementById('obFarmUnit').value;
+  const crops = Array.from(document.querySelectorAll('#cropChips .chip.selected')).map(c => c.dataset.crop);
+  const certs = Array.from(document.querySelectorAll('#certChips .chip.selected')).map(c => c.dataset.cert);
+
+  if(!name){ showToast('Please enter your name'); goToScreen('screen-ob1'); return; }
+  if(!phone){ showToast('Please enter your phone number'); goToScreen('screen-ob1'); return; }
+
+  const { data: { user } } = await sb.auth.getUser();
+  if(!user){ showToast('Session expired, please sign in again'); goToScreen('screen-login'); return; }
+
+  const { error } = await sb.from('farmers').upsert({
+    id: user.id,
+    name, phone,
+    farm_name: farmName || null,
+    years_farming: years ? Number(years) : null,
+    region, district, village,
+    farm_size: farmSize ? Number(farmSize) : null,
+    farm_unit: farmUnit,
+    crops, certifications: certs,
+    photo_url: obPhotoUrl || null,
+    latitude: state.farmer.latitude, longitude: state.farmer.longitude
+  });
+
+  if(error){ showToast('Could not save profile: ' + error.message); return; }
+
+  state.farmer = { name, phone, farmName, years: years || '-', region, district, village, farmSize: farmSize || '-', farmUnit, crops, certs, photoUrl: obPhotoUrl || null, latitude: state.farmer.latitude, longitude: state.farmer.longitude };
+  obPhotoUrl = null;
+
+  showToast('Profile saved!');
+  goToScreen('screen-home');
+}
+
+/* ===================== ADD LISTING interactions ===================== */
+let addListingPhotoUrls = [];
+function triggerAddPhotoPicker(){ document.getElementById('addPhotoInput').click(); }
+function renderAddPhotoRow(){
+  document.getElementById('addPhotoRow').innerHTML = addListingPhotoUrls
+    .map(u => photoThumbHtml(u, `removeAddListingPhoto('${u.split('?')[0]}')`)).join('');
+}
+function removeAddListingPhoto(baseUrl){
+  addListingPhotoUrls = addListingPhotoUrls.filter(u => u.split('?')[0] !== baseUrl);
+  renderAddPhotoRow();
+}
+async function handleAddListingPhotoFiles(e){
+  const files = Array.from(e.target.files || []);
+  e.target.value = '';
+  if(!files.length) return;
+  const room = Math.max(0, 4 - addListingPhotoUrls.length);
+  if(files.length > room) showToast('You can add up to 4 photos per listing');
+  const row = document.getElementById('addPhotoRow');
+  for(const file of files.slice(0, room)){
+    const tempId = 'tmp' + Math.random().toString(36).slice(2, 8);
+    row.insertAdjacentHTML('beforeend', `<div class="photo-thumb" id="${tempId}"><img src="${URL.createObjectURL(file)}" alt="" style="opacity:.6" /></div>`);
+    try {
+      const url = await uploadPhoto(file, 'listings');
+      addListingPhotoUrls.push(url);
+    } catch(err){
+      showToast('Could not upload photo: ' + err.message);
+    }
+    const el = document.getElementById(tempId);
+    if(el) el.remove();
+    renderAddPhotoRow();
+  }
+}
+
+async function publishListing(){
+  const crop = document.getElementById('addCrop').value;
+  const variety = document.getElementById('addVariety').value.trim();
+  const qty = document.getElementById('addQty').value.trim();
+  const unit = document.getElementById('addUnit').value;
+  const gradeChip = document.querySelector('#gradeChips .chip.selected');
+  const grade = gradeChip ? gradeChip.dataset.grade : 'Grade A';
+  const price = document.getElementById('addPrice').value.trim();
+  const priceUnit = document.getElementById('addPriceUnit').value;
+  const harvestDate = document.getElementById('addHarvestDate').value;
+  const notes = document.getElementById('addNotes').value.trim();
+
+  if(!qty || !price){ showToast('Add quantity and price'); return; }
+
+  const { data: { user } } = await sb.auth.getUser();
+  if(!user){ showToast('Session expired, please sign in again'); goToScreen('screen-login'); return; }
+
+  const { error } = await sb.from('listings').insert({
+    farmer_id: user.id,
+    farmer_name: state.farmer.name || 'Farmer',
+    farmer_phone: state.farmer.phone || null,
+    farmer_location: `${state.farmer.village || ''}, ${state.farmer.region || ''}`,
+    latitude: state.farmer.latitude, longitude: state.farmer.longitude,
+    crop, variety: variety || null, quantity: Number(qty), unit, grade,
+    price: Number(price), price_unit: priceUnit,
+    harvest_date: harvestDate || null,
+    photo_urls: addListingPhotoUrls, photos_count: addListingPhotoUrls.length, notes: notes || null
+  });
+
+  if(error){ showToast('Could not publish listing: ' + error.message); return; }
+
+  document.getElementById('addVariety').value = '';
+  document.getElementById('addQty').value = '';
+  document.getElementById('addPrice').value = '';
+  document.getElementById('addHarvestDate').value = '';
+  document.getElementById('addNotes').value = '';
+  addListingPhotoUrls = [];
+  document.getElementById('addPhotoRow').innerHTML = '';
+  document.querySelectorAll('#gradeChips .chip').forEach(c => c.classList.remove('selected'));
+
+  showToast('Listing published!');
+  goToScreen('screen-home');
+}
+
+/* ===================== RENDER: HOME ===================== */
+function fmtDate(d){
+  if(!d) return 'Flexible';
+  const dt = new Date(d + 'T00:00:00');
+  if(isNaN(dt)) return d;
+  return dt.toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' });
+}
+
+function cropIconSvg(){
+  return `<svg class="icon" style="width:26px;height:26px" viewBox="0 0 24 24" fill="none"><path d="M12 21c-4-3-6-6.5-6-10a6 6 0 0112 0c0 3.5-2 7-6 10z" stroke="#9A7C2E" stroke-width="1.6"/><path d="M12 11a3 3 0 100-6 3 3 0 000 6z" stroke="#9A7C2E" stroke-width="1.6"/></svg>`;
+}
+
+function listingPendingInterestCount(listingId){
+  return state.incomingPurchaseRequests.filter(r => r.listingId === listingId && r.status === 'Pending').length;
+}
+
+function listingCardHtml(l){
+  const badgeClass = l.status.toLowerCase();
+  const pending = listingPendingInterestCount(l.id);
+  const dotHtml = pending > 0 ? `<div class="unread-dot">${pending > 99 ? '99+' : pending}</div>` : '';
+  const photoHtml = l.photoUrls && l.photoUrls.length ? `<img src="${l.photoUrls[0]}" alt="" />` : cropIconSvg();
+  return `<div class="card listing-card" onclick="openDetail('${l.id}')">
+    ${dotHtml}
+    <div class="listing-photo">${photoHtml}</div>
+    <div class="listing-info">
+      <div class="listing-top">
+        <div class="crop-name">${l.crop}${l.variety ? ' &middot; ' + l.variety : ''}</div>
+        <span class="badge ${badgeClass}">${l.status}</span>
+      </div>
+      <div class="meta">${l.qty} ${l.unit} &middot; ${l.grade} &middot; ${fmtDate(l.harvestDate)}</div>
+      <div class="price">TZS ${Number(l.price).toLocaleString()} / ${l.priceUnit}</div>
+    </div>
+  </div>`;
+}
+
+function emptyStateHtml(){
+  return `<div class="empty-state">
+    <div class="icon-wrap"><svg class="icon" style="width:24px;height:24px" viewBox="0 0 24 24" fill="none"><path d="M12 21c-4-3-6-6.5-6-10a6 6 0 0112 0c0 3.5-2 7-6 10z" stroke="#6B6B6B" stroke-width="1.6"/></svg></div>
+    <strong>No listings yet</strong>
+    <p>Add your first crop listing so buyers can find you.</p>
+  </div>`;
+}
+
+function renderHome(){
+  document.getElementById('homeGreeting').textContent = `Habari, ${state.farmer.name || 'Farmer'} 👋`;
+  document.getElementById('homeLoc').textContent = `${state.farmer.village || 'Your village'}, ${state.farmer.region || 'Region'}`;
+  document.getElementById('statActive').textContent = state.listings.filter(l => l.status === 'Available').length;
+  document.getElementById('statSold').textContent = state.listings.filter(l => l.status === 'Sold').length;
+
+  const wrap = document.getElementById('homeListingsWrap');
+  const recent = state.listings.slice(0, 3);
+  wrap.innerHTML = recent.length ? recent.map(listingCardHtml).join('') : emptyStateHtml();
+
+  renderHomeRequests();
+}
+
+/* ===================== RENDER: LISTINGS ===================== */
+document.getElementById('listingFilters').addEventListener('click', e => {
+  const pill = e.target.closest('.filter-pill'); if(!pill) return;
+  document.querySelectorAll('#listingFilters .filter-pill').forEach(p => p.classList.remove('active'));
+  pill.classList.add('active');
+  state.activeFilter = pill.dataset.filter;
+  renderListings();
+});
+
+function renderListings(){
+  const wrap = document.getElementById('allListingsWrap');
+  let items = state.listings;
+  if(state.activeFilter !== 'All') items = items.filter(l => l.status === state.activeFilter);
+  wrap.innerHTML = items.length ? items.map(listingCardHtml).join('') : emptyStateHtml();
+}
+
+/* ===================== DETAIL ===================== */
+function interestCardHtml(pr){
+  const initial = pr.buyerBusiness.charAt(0).toUpperCase();
+  return `<div class="card interest-card">
+    <div class="interest-top">
+      <div class="interest-buyer">
+        <div class="av">${initial}</div>
+        <div>
+          <div class="nm">${pr.buyerBusiness}</div>
+          <div class="loc">${pr.buyerType} &middot; ${pr.location}</div>
+        </div>
+      </div>
+      <span class="badge ${pr.status.toLowerCase()}">${pr.status}</span>
+    </div>
+    <div class="interest-meta-row">
+      <span class="qty">${pr.qty.toLocaleString()} ${pr.unit} &middot; sent ${fmtDate(pr.sentAt)}</span>
+      <span class="price">TZS ${pr.price.toLocaleString()}/${pr.priceUnit}</span>
+    </div>
+    ${pr.status === 'Pending' ? `<div class="interest-actions">
+      <button class="btn btn-ghost btn-sm" style="flex:1; background:var(--white);" onclick="declinePurchaseRequest('${pr.id}')">Decline</button>
+      <button class="btn btn-primary btn-sm" style="flex:1;" onclick="acceptPurchaseRequest('${pr.id}')">Accept</button>
+    </div>` : ''}
+    ${pr.status === 'Accepted' ? `<div class="connect-card">
+      <div class="connect-title">\u2713 Connected</div>
+      <div class="connect-phone">${pr.buyerPhone || 'No phone on file'}</div>
+      ${pr.buyerPhone ? `<a class="wa-btn" href="${waLink(pr.buyerPhone, `Hi, following up on the ${pr.qty}${pr.unit} deal on Shambani`)}" target="_blank" rel="noopener">Message on WhatsApp</a>` : ''}
+      <div class="delivery-label">Delivery</div>
+      ${deliveryChipsHtml(pr.deliveryMethod, 'setPurchaseRequestDelivery', pr.id)}
+      <button class="btn btn-ghost btn-sm" style="width:100%; margin-top:12px; background:var(--white);" onclick="if(confirm('Cancel this deal? The listing will become available again.')) declinePurchaseRequest('${pr.id}')">Cancel deal</button>
+    </div>` : ''}
+  </div>`;
+}
+
+function renderListingInterest(listingId){
+  const items = state.incomingPurchaseRequests.filter(r => r.listingId === listingId);
+  document.getElementById('detailInterestHeading').textContent = `Buyer interest (${items.length})`;
+  const wrap = document.getElementById('detailInterestWrap');
+  wrap.innerHTML = items.length
+    ? items.map(interestCardHtml).join('')
+    : `<div class="empty-state" style="padding:20px;"><p>No buyers have requested this listing yet.</p></div>`;
+}
+
+async function acceptPurchaseRequest(id){
+  const pr = state.incomingPurchaseRequests.find(x => x.id === id);
+  if(!pr) return;
+  const l = state.listings.find(x => x.id === pr.listingId);
+
+  if(l && l.status !== 'Available'){
+    showToast(`This listing is already ${l.status.toLowerCase()}. Decline or cancel the current deal first`);
+    return;
+  }
+
+  const { error } = await sb.from('purchase_requests').update({ status: 'Accepted' }).eq('id', id);
+  if(error){ showToast('Could not accept request: ' + error.message); return; }
+
+  if(l){
+    const { error: listErr } = await sb.from('listings').update({ status: 'Reserved' }).eq('id', l.id);
+    if(!listErr) l.status = 'Reserved';
+  }
+
+  // Prevent double-booking: auto-decline any other pending requests on this same listing.
+  const others = state.incomingPurchaseRequests.filter(x => x.listingId === pr.listingId && x.id !== id && x.status === 'Pending');
+  if(others.length){
+    const otherIds = others.map(x => x.id);
+    const { error: declineErr } = await sb.from('purchase_requests').update({ status: 'Declined' }).in('id', otherIds);
+    if(!declineErr) others.forEach(x => x.status = 'Declined');
+  }
+
+  pr.status = 'Accepted';
+  showToast(`Accepted request from ${pr.buyerBusiness}`);
+  renderListingInterest(pr.listingId);
+  if(l){
+    const badge = document.getElementById('detailBadge');
+    badge.textContent = l.status;
+    badge.className = 'badge ' + l.status.toLowerCase();
+  }
+}
+
+async function declinePurchaseRequest(id){
+  const pr = state.incomingPurchaseRequests.find(x => x.id === id);
+  if(!pr) return;
+  const wasAccepted = pr.status === 'Accepted';
+
+  const { error } = await sb.from('purchase_requests').update({ status: 'Declined' }).eq('id', id);
+  if(error){ showToast('Could not decline request: ' + error.message); return; }
+  pr.status = 'Declined';
+
+  // Un-reserve: if this was the accepted deal on the listing, free it back up.
+  if(wasAccepted){
+    const l = state.listings.find(x => x.id === pr.listingId);
+    if(l && l.status === 'Reserved'){
+      const { error: listErr } = await sb.from('listings').update({ status: 'Available' }).eq('id', l.id);
+      if(!listErr) l.status = 'Available';
+      const badge = document.getElementById('detailBadge');
+      if(badge){ badge.textContent = l.status; badge.className = 'badge ' + l.status.toLowerCase(); }
+    }
+  }
+
+  showToast(`Declined request from ${pr.buyerBusiness}`);
+  renderListingInterest(pr.listingId);
+}
+
+async function setPurchaseRequestDelivery(id, method){
+  const pr = state.incomingPurchaseRequests.find(x => x.id === id);
+  if(!pr) return;
+  const { error } = await sb.from('purchase_requests').update({ delivery_method: method }).eq('id', id);
+  if(error){ showToast('Could not update delivery method'); return; }
+  pr.deliveryMethod = method;
+  renderListingInterest(pr.listingId);
+}
+
+function openDetail(id){
+  const l = state.listings.find(x => x.id === id);
+  if(!l) return;
+  state.currentDetailId = id;
+  document.getElementById('detailTitle').innerHTML = `${l.crop} &middot; ${l.grade}`;
+  document.getElementById('detailFarmer').textContent = `Listed by ${state.farmer.name || 'You'} \u00B7 ${state.farmer.village || ''}, ${state.farmer.region || ''}`;
+  document.getElementById('detailQty').textContent = `${l.qty} ${l.unit}`;
+  document.getElementById('detailPrice').textContent = `TZS ${Number(l.price).toLocaleString()}/${l.priceUnit}`;
+  document.getElementById('detailDate').textContent = fmtDate(l.harvestDate);
+  document.getElementById('detailVariety').textContent = l.variety || '-';
+  const badge = document.getElementById('detailBadge');
+  badge.textContent = l.status;
+  badge.className = 'badge ' + l.status.toLowerCase();
+  renderListingInterest(l.id);
+  goToScreen('screen-detail');
+}
+
+async function markListingSold(){
+  const l = state.listings.find(x => x.id === state.currentDetailId);
+  if(!l) return;
+  const newStatus = l.status === 'Sold' ? 'Available' : 'Sold';
+  const { error } = await sb.from('listings').update({ status: newStatus }).eq('id', l.id);
+  if(error){ showToast('Could not update listing: ' + error.message); return; }
+  l.status = newStatus;
+  showToast(newStatus === 'Sold' ? 'Marked as sold' : 'Marked as available');
+  openDetail(l.id);
+}
+
+async function deleteCurrentListing(){
+  const { error } = await sb.from('listings').delete().eq('id', state.currentDetailId);
+  if(error){ showToast('Could not remove listing: ' + error.message); return; }
+  state.listings = state.listings.filter(x => x.id !== state.currentDetailId);
+  showToast('Listing removed');
+  goToScreen('screen-listings');
+}
+
+/* ===================== BUYING REQUESTS ===================== */
+document.getElementById('requestFilters').addEventListener('click', e => {
+  const pill = e.target.closest('.filter-pill'); if(!pill) return;
+  document.querySelectorAll('#requestFilters .filter-pill').forEach(p => p.classList.remove('active'));
+  pill.classList.add('active');
+  state.requestFilter = pill.dataset.filter;
+  renderRequests();
+});
+
+function requestStatus(r){
+  if(r.myOffer) return 'Responded';
+  if(r.matchedQty >= r.quantity) return 'Fulfilled';
+  return 'Open';
+}
+
+function requestCardHtml(r){
+  const status = requestStatus(r);
+  const pct = Math.min(100, Math.round((r.matchedQty / r.quantity) * 100));
+  const km = haversineKm(state.farmer.latitude, state.farmer.longitude, r.latitude, r.longitude);
+  const photoHtml = r.photoUrl ? `<img src="${r.photoUrl}" alt="" />` : cropIconSvg();
+  return `<div class="card listing-card" onclick="openRequestDetail('${r.id}')">
+    <div class="listing-photo request-photo">${photoHtml}</div>
+    <div class="listing-info">
+      <div class="listing-top">
+        <div class="crop-name">${r.crop} &middot; ${r.quality}</div>
+        <span class="badge ${status.toLowerCase()}">${status}</span>
+      </div>
+      <div class="buyer-tag">${r.buyer} &middot; ${r.location}</div>
+      ${km != null ? `<div class="distance-badge">\ud83d\udccd ${distanceLabel(km)}</div>` : ''}
+      <div class="meta">Needs ${r.quantity.toLocaleString()} ${r.unit} by ${fmtDate(r.deliveryDate)}</div>
+      <div class="price">TZS ${r.targetPrice.toLocaleString()} / ${r.priceUnit}</div>
+      <div class="progress-track"><div class="progress-fill" style="width:${pct}%;"></div></div>
+      <div class="progress-label">${r.matchedQty.toLocaleString()} / ${r.quantity.toLocaleString()} ${r.unit} secured</div>
+    </div>
+  </div>`;
+}
+
+function emptyRequestsHtml(){
+  return `<div class="empty-state">
+    <div class="icon-wrap"><svg class="icon" style="width:24px;height:24px" viewBox="0 0 24 24" fill="none"><path d="M5 4h14v12H8l-3 3V4z" stroke="#6B6B6B" stroke-width="1.6"/></svg></div>
+    <strong>No requests here</strong>
+    <p>New buyer requests matching your crops will show up here.</p>
+  </div>`;
+}
+
+function requestMatchesFarmerCrops(r){
+  return state.farmer.crops.length === 0 || state.farmer.crops.includes(r.crop);
+}
+
+function toggleRequestScope(){
+  state.requestShowAll = !state.requestShowAll;
+  renderRequests();
+}
+
+function renderRequests(){
+  const wrap = document.getElementById('allRequestsWrap');
+  let items = state.buyingRequests;
+  if(state.requestFilter === 'Open') items = items.filter(r => requestStatus(r) === 'Open');
+  if(state.requestFilter === 'Responded') items = items.filter(r => requestStatus(r) === 'Responded');
+  if(!state.requestShowAll) items = items.filter(requestMatchesFarmerCrops);
+
+  if(state.requestSort === 'nearest'){
+    items = items.slice().sort((a, b) => {
+      const da = haversineKm(state.farmer.latitude, state.farmer.longitude, a.latitude, a.longitude);
+      const db = haversineKm(state.farmer.latitude, state.farmer.longitude, b.latitude, b.longitude);
+      if(da == null) return 1;
+      if(db == null) return -1;
+      return da - db;
+    });
+  }
+
+  if(state.requestsView === 'map'){
+    wrap.innerHTML = '';
+    document.getElementById('requestsMapView').style.display = 'block';
+    renderRequestsMap(items);
+  } else {
+    document.getElementById('requestsMapView').style.display = 'none';
+    wrap.innerHTML = items.length ? items.map(requestCardHtml).join('') : emptyRequestsHtml();
+  }
+
+  const scopeLabel = document.getElementById('reqScopeLabel');
+  const scopeBtn = document.getElementById('reqScopeToggleBtn');
+  if(state.farmer.crops.length === 0){
+    scopeLabel.textContent = 'Showing all buying requests';
+    scopeBtn.style.display = 'none';
+  } else if(state.requestShowAll){
+    scopeLabel.textContent = 'Showing requests for all crops. Share these with others who grow them';
+    scopeBtn.textContent = 'Show my crops only';
+    scopeBtn.style.display = 'inline';
+  } else {
+    scopeLabel.textContent = `Showing requests for your crops: ${state.farmer.crops.join(', ')}`;
+    scopeBtn.textContent = 'Show all crops';
+    scopeBtn.style.display = 'inline';
+  }
+}
+
+function setRequestsSort(sort){
+  state.requestSort = sort;
+  document.querySelectorAll('#reqSortToggle .view-toggle-btn').forEach(b => b.classList.toggle('active', b.dataset.sort === sort));
+  renderRequests();
+}
+
+function setRequestsView(view){
+  state.requestsView = view;
+  document.querySelectorAll('#reqViewToggle .view-toggle-btn').forEach(b => b.classList.toggle('active', b.dataset.view === view));
+  renderRequests();
+}
+
+let requestsMapInstance = null;
+async function renderRequestsMap(items){
+  try { await loadLeaflet(); } catch(e){ showToast('Could not load the map. Check your connection.'); return; }
+  const withCoords = items.filter(r => r.latitude != null && r.longitude != null);
+  if(requestsMapInstance){ requestsMapInstance.remove(); requestsMapInstance = null; }
+  const centerLat = state.farmer.latitude || -3.3869, centerLng = state.farmer.longitude || 36.6830;
+  const map = L.map('requestsMapView', { zoomControl: true }).setView([centerLat, centerLng], 11);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '\u00a9 OpenStreetMap', maxZoom: 18 }).addTo(map);
+
+  if(state.farmer.latitude != null){
+    L.marker([state.farmer.latitude, state.farmer.longitude], {
+      icon: L.divIcon({ className: 'leaflet-pin-you', iconSize: [16,16] })
+    }).addTo(map).bindPopup('You are here');
+  }
+
+  withCoords.forEach(r => {
+    const km = haversineKm(state.farmer.latitude, state.farmer.longitude, r.latitude, r.longitude);
+    L.marker([r.latitude, r.longitude], {
+      icon: L.divIcon({ className: 'leaflet-pin-item', iconSize: [14,14] })
+    }).addTo(map).bindPopup(`<b>${r.crop}</b> \u00b7 ${r.buyer}<br>${km != null ? distanceLabel(km) : ''}<br><a href="#" onclick="openRequestDetail('${r.id}'); return false;">View request</a>`);
+  });
+
+  requestsMapInstance = map;
+  setTimeout(() => map.invalidateSize(), 100);
+}
+
+function renderHomeRequests(){
+  const wrap = document.getElementById('homeRequestsWrap');
+  const top = state.buyingRequests.filter(r => requestStatus(r) === 'Open' && requestMatchesFarmerCrops(r)).slice(0, 2);
+  wrap.innerHTML = top.length ? top.map(requestCardHtml).join('') : emptyRequestsHtml();
+}
+
+function openRequestDetail(id){
+  const r = state.buyingRequests.find(x => x.id === id);
+  if(!r) return;
+  state.currentRequestId = id;
+
+  document.getElementById('reqDetailTitle').textContent = `${r.crop} needed`;
+  document.getElementById('reqDetailBuyer').textContent = `Posted by ${r.buyer}`;
+  document.getElementById('reqDetailQty').textContent = `${r.quantity.toLocaleString()} ${r.unit}`;
+  document.getElementById('reqDetailQuality').textContent = r.quality;
+  document.getElementById('reqDetailLocation').textContent = r.location;
+  document.getElementById('reqDetailDate').textContent = fmtDate(r.deliveryDate);
+  document.getElementById('reqDetailPrice').textContent = `TZS ${r.targetPrice.toLocaleString()}/${r.priceUnit}`;
+
+  const pct = Math.min(100, Math.round((r.matchedQty / r.quantity) * 100));
+  document.getElementById('reqDetailProgressFill').style.width = pct + '%';
+  document.getElementById('reqDetailProgressLabel').textContent = `${r.matchedQty.toLocaleString()} / ${r.quantity.toLocaleString()} ${r.unit} secured from other farmers`;
+
+  const summaryEl = document.getElementById('reqDetailOfferSummary');
+  const formEl = document.getElementById('reqDetailForm');
+
+  if(r.myOffer){
+    summaryEl.innerHTML = renderOfferSummaryBlock(r);
+    formEl.style.display = 'none';
+  } else {
+    summaryEl.innerHTML = '';
+    formEl.style.display = 'block';
+    document.getElementById('reqOfferQty').value = '';
+    document.getElementById('reqOfferPrice').value = '';
+    document.getElementById('reqOfferDate').value = '';
+    document.getElementById('reqOfferSubmitBtn').textContent = 'Submit offer';
+  }
+
+  goToScreen('screen-request-detail');
+}
+
+async function setOfferDelivery(buyingRequestId, method){
+  const r = state.buyingRequests.find(x => x.id === buyingRequestId);
+  if(!r || !r.myOffer) return;
+  const { error } = await sb.from('offers').update({ delivery_method: method }).eq('id', r.myOffer.id);
+  if(error){ showToast('Could not update delivery method'); return; }
+  r.myOffer.deliveryMethod = method;
+  openRequestDetail(r.id);
+}
+
+async function submitOffer(){
+  const r = state.buyingRequests.find(x => x.id === state.currentRequestId);
+  if(!r) return;
+  const qty = document.getElementById('reqOfferQty').value.trim();
+  const unit = document.getElementById('reqOfferUnit').value;
+  const price = document.getElementById('reqOfferPrice').value.trim();
+  const date = document.getElementById('reqOfferDate').value;
+
+  if(!qty || !price){ showToast('Add quantity and price'); return; }
+
+  const { data: { user } } = await sb.auth.getUser();
+  if(!user){ showToast('Session expired, please sign in again'); goToScreen('screen-login'); return; }
+
+  const { error } = await sb.from('offers').upsert({
+    buying_request_id: r.id,
+    farmer_id: user.id,
+    farmer_name: state.farmer.name || 'Farmer',
+    farmer_phone: state.farmer.phone || null,
+    farmer_location: `${state.farmer.village || ''}, ${state.farmer.region || ''}`,
+    quantity: Number(qty), unit, price: Number(price), ready_date: date || null,
+    status: 'Pending', withdrawal_reason: null, withdrawal_notes: null
+  }, { onConflict: 'buying_request_id,farmer_id' });
+
+  if(error){ showToast('Could not submit offer: ' + error.message); return; }
+
+  showToast('Offer sent to buyer!');
+  await loadBuyingRequests();
+  openRequestDetail(r.id);
+}
+
+function renderOfferSummaryBlock(r){
+  const connectBlock = r.myOffer.status === 'Accepted' ? `<div class="connect-card">
+      <div class="connect-title">\u2713 Connected: buyer accepted your offer</div>
+      <div class="connect-phone">${r.buyerPhone || 'No phone on file'}</div>
+      ${r.buyerPhone ? `<a class="wa-btn" href="${waLink(r.buyerPhone, `Hi, following up on the ${r.crop} deal on Shambani`)}" target="_blank" rel="noopener">Message on WhatsApp</a>` : ''}
+      <div class="delivery-label">Delivery</div>
+      ${deliveryChipsHtml(r.myOffer.deliveryMethod, 'setOfferDelivery', r.id)}
+    </div>` : '';
+  return `<div class="offer-summary">
+      <div class="lbl">Your offer ${r.myOffer.status === 'Accepted' ? 'was accepted' : 'submitted'}</div>
+      <div class="row"><span>Quantity</span><span>${r.myOffer.qty.toLocaleString()} ${r.myOffer.unit}</span></div>
+      <div class="row"><span>Price</span><span>TZS ${Number(r.myOffer.price).toLocaleString()}/${r.unit}</span></div>
+      <div class="row"><span>Ready by</span><span>${fmtDate(r.myOffer.date)}</span></div>
+      <button class="btn btn-ghost btn-sm" style="margin-top:12px; background:var(--white);" onclick="openWithdrawSurvey()">Withdraw offer</button>
+    </div>${connectBlock}`;
+}
+
+function renderWithdrawSurveyBlock(){
+  return `<div class="offer-summary" style="background:var(--white); border-color:var(--line);">
+    <div class="lbl" style="color:var(--ink);">Why are you withdrawing?</div>
+    <div class="chip-group" id="withdrawReasonChips" style="margin:10px 0 14px 0;">
+      <div class="chip" data-reason="Price too low">Price too low</div>
+      <div class="chip" data-reason="Crop damaged or lost">Crop damaged or lost</div>
+      <div class="chip" data-reason="Already sold elsewhere">Already sold elsewhere</div>
+      <div class="chip" data-reason="Entered by mistake">Entered by mistake</div>
+      <div class="chip" data-reason="Other">Other</div>
+    </div>
+    <textarea id="withdrawNotes" placeholder="Anything else? (optional)" style="width:100%; padding:12px 13px; border-radius:10px; border:1.5px solid var(--line); font-family:'Inter',sans-serif; font-size:13.5px; min-height:64px; resize:none; margin-bottom:14px; box-sizing:border-box;"></textarea>
+    <div style="display:flex; gap:10px;">
+      <button class="btn btn-ghost btn-sm" style="flex:1; background:var(--white);" onclick="cancelWithdraw()">Cancel</button>
+      <button class="btn btn-dark btn-sm" style="flex:1;" onclick="confirmWithdraw()">Confirm withdrawal</button>
+    </div>
+  </div>`;
+}
+
+document.getElementById('reqDetailOfferSummary').addEventListener('click', e => {
+  const chip = e.target.closest('#withdrawReasonChips .chip');
+  if(!chip) return;
+  document.querySelectorAll('#withdrawReasonChips .chip').forEach(c => c.classList.remove('selected'));
+  chip.classList.add('selected');
+});
+
+function openWithdrawSurvey(){
+  document.getElementById('reqDetailOfferSummary').innerHTML = renderWithdrawSurveyBlock();
+}
+
+function cancelWithdraw(){
+  const r = state.buyingRequests.find(x => x.id === state.currentRequestId);
+  if(!r) return;
+  document.getElementById('reqDetailOfferSummary').innerHTML = renderOfferSummaryBlock(r);
+}
+
+async function confirmWithdraw(){
+  const r = state.buyingRequests.find(x => x.id === state.currentRequestId);
+  if(!r || !r.myOffer) return;
+  const reasonChip = document.querySelector('#withdrawReasonChips .chip.selected');
+  if(!reasonChip){ showToast('Select a reason to continue'); return; }
+  const reason = reasonChip.dataset.reason;
+  const notes = document.getElementById('withdrawNotes').value.trim();
+
+  const { data: { user } } = await sb.auth.getUser();
+  if(!user) return;
+
+  const { error } = await sb.from('offers')
+    .update({ status: 'Withdrawn', withdrawal_reason: reason, withdrawal_notes: notes || null })
+    .eq('buying_request_id', r.id)
+    .eq('farmer_id', user.id);
+
+  if(error){ showToast('Could not withdraw offer: ' + error.message); return; }
+
+  showToast('Offer withdrawn');
+  await loadBuyingRequests();
+  openRequestDetail(r.id);
+}
+
+/* ===================== PROFILE ===================== */
+function renderProfile(){
+  const f = state.farmer;
+  const avatarImg = document.getElementById('profileAvatarImg');
+  const avatarText = document.getElementById('profileInitialText');
+  if(f.photoUrl){
+    avatarImg.src = f.photoUrl;
+    avatarImg.style.display = 'block';
+    avatarText.style.display = 'none';
+  } else {
+    avatarImg.style.display = 'none';
+    avatarText.style.display = 'block';
+    avatarText.textContent = (f.name || 'F').charAt(0).toUpperCase();
+  }
+  document.getElementById('profileName').textContent = f.name || 'Farmer';
+  document.getElementById('profileLoc').innerHTML = `<svg class="icon" style="width:13px;height:13px" viewBox="0 0 24 24" fill="none"><path d="M12 21s7-6.5 7-12a7 7 0 10-14 0c0 5.5 7 12 7 12z" stroke="#6B6B6B" stroke-width="1.6"/></svg> ${f.village || '-'}, ${f.region || '-'}`;
+  document.getElementById('pfFarmSize').textContent = f.farmSize ? `${f.farmSize} ${f.farmUnit.toLowerCase()}` : '-';
+  document.getElementById('pfYears').textContent = f.years ? `${f.years} years` : '-';
+  document.getElementById('pfCrops').textContent = f.crops.length ? f.crops.join(', ') : '-';
+  document.getElementById('pfCerts').textContent = f.certs.length ? f.certs.join(', ') : 'None yet';
+  document.getElementById('pfTotalListed').textContent = state.listings.length;
+  document.getElementById('pfTotalSold').textContent = state.listings.filter(l => l.status === 'Sold').length;
+}
+
+/* ===================== EDIT PROFILE ===================== */
+function populateEditForm(){
+  const f = state.farmer;
+  document.getElementById('edName').value = f.name || '';
+  document.getElementById('edPhone').value = f.phone || '';
+  document.getElementById('edFarmName').value = f.farmName || '';
+  document.getElementById('edYears').value = f.years === '-' ? '' : (f.years || '');
+  document.getElementById('edRegion').value = f.region || 'Arusha';
+  document.getElementById('edDistrict').value = f.district === '-' ? '' : (f.district || '');
+  document.getElementById('edVillage').value = f.village === '-' ? '' : (f.village || '');
+  document.getElementById('edFarmSize').value = f.farmSize === '-' ? '' : (f.farmSize || '');
+  document.getElementById('edFarmUnit').value = f.farmUnit || 'Acres';
+
+  document.querySelectorAll('#edCropChips .chip').forEach(c => {
+    c.classList.toggle('selected', f.crops.includes(c.dataset.crop));
+  });
+  document.querySelectorAll('#edCertChips .chip').forEach(c => {
+    c.classList.toggle('selected', f.certs.includes(c.dataset.cert));
+  });
+}
+
+async function saveProfileEdits(){
+  const f = state.farmer;
+  const name = document.getElementById('edName').value.trim() || 'Farmer';
+  const phone = document.getElementById('edPhone').value.trim();
+  const farmName = document.getElementById('edFarmName').value.trim();
+  const years = document.getElementById('edYears').value.trim();
+  const region = document.getElementById('edRegion').value;
+  const district = document.getElementById('edDistrict').value.trim() || '-';
+  const village = document.getElementById('edVillage').value.trim() || '-';
+  const farmSize = document.getElementById('edFarmSize').value.trim();
+  const farmUnit = document.getElementById('edFarmUnit').value;
+  const crops = Array.from(document.querySelectorAll('#edCropChips .chip.selected')).map(c => c.dataset.crop);
+  const certs = Array.from(document.querySelectorAll('#edCertChips .chip.selected')).map(c => c.dataset.cert);
+
+  const { data: { user } } = await sb.auth.getUser();
+  if(!user){ showToast('Session expired, please sign in again'); goToScreen('screen-login'); return; }
+
+  const { error } = await sb.from('farmers').update({
+    name, phone,
+    farm_name: farmName || null,
+    years_farming: years ? Number(years) : null,
+    region, district, village,
+    farm_size: farmSize ? Number(farmSize) : null,
+    farm_unit: farmUnit,
+    crops, certifications: certs,
+    latitude: f.latitude, longitude: f.longitude
+  }).eq('id', user.id);
+
+  if(error){ showToast('Could not update profile: ' + error.message); return; }
+
+  f.name = name; f.phone = phone; f.farmName = farmName; f.years = years || '-';
+  f.region = region; f.district = district; f.village = village;
+  f.farmSize = farmSize || '-'; f.farmUnit = farmUnit;
+  f.crops = crops; f.certs = certs;
+
+  showToast('Profile updated');
+  goToScreen('screen-profile');
+}
+
+/* ===================== INIT ===================== */
+setActiveNav('screen-home');
+checkSessionOnLoad();
+</script>
+</body>
+</html>
