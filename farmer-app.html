@@ -26,13 +26,18 @@
     --radius-sm:10px;
   }
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
-  html,body{margin:0;padding:0;background:#EDEBE4;}
+  html,body{margin:0;padding:0;}
   body{
     font-family:'Inter',system-ui,-apple-system,sans-serif;
     color:var(--ink);
     display:flex;
     justify-content:center;
+    align-items:center;
     min-height:100vh;
+    background:
+      radial-gradient(circle at 15% 10%, rgba(255,194,68,.22) 0%, transparent 45%),
+      radial-gradient(circle at 85% 92%, rgba(46,125,70,.16) 0%, transparent 50%),
+      #F3EFE3;
   }
   h1,h2,h3,.display{ font-family:'Poppins',system-ui,sans-serif; }
 
@@ -47,8 +52,12 @@
     box-shadow:0 30px 80px rgba(0,0,0,.25);
   }
   @media (min-width:480px){
-    body{ padding:28px 12px; }
-    .app-frame{ min-height:860px; height:860px; border-radius:36px; border:8px solid var(--ink); }
+    body{ padding:40px 16px; }
+    .app-frame{
+      min-height:860px; height:860px; border-radius:36px;
+      border:1px solid rgba(26,26,26,.07);
+      box-shadow:0 40px 90px rgba(26,26,26,.16), 0 10px 30px rgba(26,26,26,.08);
+    }
   }
 
   .screen{
@@ -179,10 +188,13 @@
   .icon{ width:20px; height:20px; display:inline-block; flex-shrink:0; }
 
   /* ---------- Login ---------- */
-  #screen-login .screen-body{ display:flex; flex-direction:column; justify-content:center; padding:20px 26px; }
+  .login-hero{ width:100%; height:190px; display:block; overflow:hidden; flex-shrink:0; }
+  .login-hero svg{ width:100%; height:100%; display:block; }
+  #screen-login .screen-body{ display:flex; flex-direction:column; justify-content:center; padding:22px 26px; }
   .brand-mark{
-    width:64px; height:64px; border-radius:18px; background:var(--yellow);
-    display:flex; align-items:center; justify-content:center; margin-bottom:22px;
+    width:52px; height:52px; border-radius:15px; background:var(--yellow);
+    display:flex; align-items:center; justify-content:center; margin-top:-48px; margin-bottom:18px;
+    box-shadow:0 8px 20px rgba(0,0,0,.12); position:relative; z-index:2;
   }
   .login-title{ font-size:26px; font-weight:700; margin:0 0 8px 0; line-height:1.25; }
   .login-sub{ font-size:14.5px; color:var(--slate); margin:0 0 30px 0; line-height:1.5; }
@@ -330,9 +342,38 @@
 
   <!-- ================= LOGIN ================= -->
   <div class="screen active" id="screen-login">
+    <div class="login-hero">
+      <svg viewBox="0 0 400 190" preserveAspectRatio="xMidYMax slice" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="skyGradFarmer" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#FFE9BE"/>
+            <stop offset="100%" stop-color="#FAFAF7"/>
+          </linearGradient>
+        </defs>
+        <rect width="400" height="190" fill="url(#skyGradFarmer)"/>
+        <circle cx="330" cy="46" r="46" fill="#FFC244" opacity="0.18"/>
+        <circle cx="330" cy="46" r="30" fill="#FFC244"/>
+        <g fill="none" stroke="#1A1A1A" stroke-width="1.6" stroke-linecap="round" opacity="0.3">
+          <path d="M60 38q6-6 12 0"/>
+          <path d="M82 30q6-6 12 0"/>
+          <path d="M150 52q6-6 12 0"/>
+        </g>
+        <path d="M0 118c60-26 100-26 160-6s110 22 160 2 80-14 80-14v90H0z" fill="#DCEBD9"/>
+        <path d="M0 150c50-20 90-24 150-10s120 24 170 4 80-10 80-10v56H0z" fill="#2E7D46"/>
+        <g stroke="#1F4E30" stroke-width="2" stroke-linecap="round" opacity="0.45">
+          <path d="M40 168v14"/><path d="M70 164v18"/><path d="M100 168v14"/>
+          <path d="M170 160v20"/><path d="M200 164v18"/><path d="M230 160v20"/>
+          <path d="M300 166v16"/><path d="M330 162v20"/><path d="M360 166v16"/>
+        </g>
+      </svg>
+    </div>
     <div class="screen-body">
       <div class="brand-mark">
-        <svg class="icon" style="width:34px;height:34px" viewBox="0 0 24 24" fill="none"><path d="M12 2L3 7v6c0 5 4 8.5 9 9 5-.5 9-4 9-9V7l-9-5z" fill="#1A1A1A"/><path d="M8.5 12.5l2.5 2.5 5-5" stroke="#FFC244" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <svg class="icon" style="width:26px;height:26px" viewBox="0 0 24 24" fill="none">
+          <path d="M12 20V11" stroke="#1A1A1A" stroke-width="2" stroke-linecap="round"/>
+          <path d="M12 14c0-4.5-4-7-9-6 1 4.5 4.5 7 9 6z" fill="#1A1A1A"/>
+          <path d="M12 11c0-4.5 4.5-7 9-6-1 4.5-4.5 7-9 6z" fill="#1A1A1A"/>
+        </svg>
       </div>
       <h1 class="login-title" id="authTitle">Karibu Shambani</h1>
       <p class="login-sub" id="authSub">List your harvest, reach verified wholesale buyers, and get fair prices, straight from your phone.</p>
