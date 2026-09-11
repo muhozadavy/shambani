@@ -393,12 +393,48 @@
           </button>
         </div>
       </div>
+      <p id="forgotPasswordRow" style="text-align:right;margin:-10px 0 16px 0;">
+        <span style="color:var(--yellow-dark); font-weight:600; font-size:13px; cursor:pointer;" onclick="openForgotPassword()">Forgot password?</span>
+      </p>
       <p id="authError" style="display:none; color:var(--red); font-size:12.5px; font-weight:600; margin:-8px 0 16px 0;"></p>
       <button class="btn btn-primary" id="authSubmitBtn" onclick="handleAuthSubmit()">Create account</button>
       <p class="hint" style="text-align:center;margin-top:16px;">
         <span id="authToggleText">Already have an account?</span>
         <span style="color:var(--yellow-dark); font-weight:700; cursor:pointer;" onclick="toggleAuthMode()" id="authToggleLink">Sign in</span>
       </p>
+    </div>
+  </div>
+
+  <!-- ================= FORGOT PASSWORD ================= -->
+  <div class="screen" id="screen-forgot-password">
+    <div class="onboard-header">
+      <h2 class="step-title">Reset your password</h2>
+      <p class="step-desc">Enter the email on your account and we'll send you a link to set a new password.</p>
+    </div>
+    <div class="screen-body no-pad-bottom" style="padding-top:0;">
+      <div id="forgotPasswordForm">
+        <div class="field">
+          <label>Email</label>
+          <div class="input-icon-wrap">
+            <svg class="icon field-icon" style="width:18px;height:18px" viewBox="0 0 24 24" fill="none"><path d="M4 6h16v12H4V6z" stroke="#9A968A" stroke-width="1.6" stroke-linejoin="round"/><path d="M4 7l8 6 8-6" stroke="#9A968A" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <input type="email" id="forgotEmail" placeholder="you@example.com" autocomplete="email" />
+          </div>
+        </div>
+        <p id="forgotError" style="display:none; color:var(--red); font-size:12.5px; font-weight:600; margin:-8px 0 16px 0;"></p>
+      </div>
+      <div id="forgotPasswordSent" style="display:none; text-align:center; padding:24px 0;">
+        <div style="width:56px;height:56px;border-radius:50%;background:var(--green-bg);display:flex;align-items:center;justify-content:center;margin:0 auto 16px;">
+          <svg class="icon" style="width:26px;height:26px" viewBox="0 0 24 24" fill="none"><path d="M4 6h16v12H4V6z" stroke="#2E7D46" stroke-width="1.6" stroke-linejoin="round"/><path d="M4 7l8 6 8-6" stroke="#2E7D46" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <p style="font-weight:600;margin:0 0 6px 0;">Check your email</p>
+        <p class="hint" style="margin:0;">We sent a reset link to <span id="forgotEmailSentTo" style="font-weight:600;color:var(--ink);"></span>. Open it on this device to set a new password.</p>
+      </div>
+    </div>
+    <div class="onboard-nav">
+      <button class="btn btn-ghost" onclick="goToScreen('screen-login')" style="max-width:56px;">
+        <svg class="icon" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="#1A1A1A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <button class="btn btn-primary" id="forgotSubmitBtn" onclick="sendPasswordReset()">Send reset link</button>
     </div>
   </div>
 
@@ -1204,13 +1240,44 @@ function toggleAuthMode(){
     document.getElementById('authSubmitBtn').textContent = 'Create account';
     document.getElementById('authToggleText').textContent = 'Already have an account?';
     document.getElementById('authToggleLink').textContent = 'Sign in';
+    document.getElementById('forgotPasswordRow').style.display = 'none';
   } else {
     document.getElementById('authTitle').textContent = 'Welcome back';
     document.getElementById('authSub').textContent = 'Sign in to manage your listings and buyer requests.';
     document.getElementById('authSubmitBtn').textContent = 'Sign in';
     document.getElementById('authToggleText').textContent = 'New here?';
     document.getElementById('authToggleLink').textContent = 'Create an account';
+    document.getElementById('forgotPasswordRow').style.display = 'block';
   }
+}
+
+function openForgotPassword(){
+  document.getElementById('forgotEmail').value = document.getElementById('authEmail').value.trim();
+  document.getElementById('forgotError').style.display = 'none';
+  document.getElementById('forgotPasswordForm').style.display = 'block';
+  document.getElementById('forgotPasswordSent').style.display = 'none';
+  document.getElementById('forgotSubmitBtn').style.display = 'block';
+  goToScreen('screen-forgot-password');
+}
+
+async function sendPasswordReset(){
+  const email = document.getElementById('forgotEmail').value.trim();
+  const errEl = document.getElementById('forgotError');
+  errEl.style.display = 'none';
+  if(!email){ errEl.textContent = 'Enter your email'; errEl.style.display = 'block'; return; }
+
+  const btn = document.getElementById('forgotSubmitBtn');
+  btn.disabled = true;
+  const { error } = await sb.auth.resetPasswordForEmail(email, {
+    redirectTo: `${window.location.origin}/reset-password.html?app=farmer`
+  });
+  btn.disabled = false;
+  if(error){ errEl.textContent = error.message; errEl.style.display = 'block'; return; }
+
+  document.getElementById('forgotEmailSentTo').textContent = email;
+  document.getElementById('forgotPasswordForm').style.display = 'none';
+  document.getElementById('forgotPasswordSent').style.display = 'block';
+  btn.style.display = 'none';
 }
 
 function showAuthError(msg){

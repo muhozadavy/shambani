@@ -49,7 +49,8 @@
   .app-frame{
     width:100%;
     max-width:480px;
-    min-height:100vh;
+    height:100vh;
+    height:100dvh;
     background:var(--bg);
     position:relative;
   }
@@ -62,18 +63,26 @@
     display:none;
     flex-direction:column;
     height:100%;
-    min-height:100vh;
-    overflow-y:auto;
-    -ms-overflow-style:none;
-    scrollbar-width:none;
+    overflow:hidden;
     animation:fadeIn .25s ease;
   }
-  .screen::-webkit-scrollbar{ display:none; }
   .screen.active{ display:flex; }
   @keyframes fadeIn{ from{opacity:0} to{opacity:1} }
 
-  .screen-body{ flex:1; padding:20px 20px 100px 20px; }
+  /* Only the body scrolls now — headers and nav bars stay put like a real app. */
+  .screen-body{
+    flex:1; min-height:0;
+    overflow-y:auto;
+    -ms-overflow-style:none;
+    scrollbar-width:none;
+    -webkit-overflow-scrolling:touch;
+    padding:20px 20px 100px 20px;
+  }
+  .screen-body::-webkit-scrollbar{ display:none; }
   .screen-body.no-pad-bottom{ padding-bottom:24px; }
+
+  /* Fixed top/bottom chrome that sits above the scrolling body */
+  .top-header, .sub-header, .onboard-header, .login-hero, .filter-row{ flex-shrink:0; }
 
   .top-header{ padding:8px 20px 18px 20px; }
   .top-header .eyebrow{ font-size:13px; color:var(--slate); margin:0 0 2px 0; font-weight:500;}
