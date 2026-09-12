@@ -4,6 +4,23 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
 <title>Shambani Farmer App</title>
+<!-- Sentry error tracking — loaded first so it can catch errors from everything below -->
+<script
+  src="https://browser.sentry-cdn.com/10.74.0/bundle.min.js"
+  integrity="sha384-ekhFYbUiD5vrs1pT5Kty50wAgPsq9eoEDo+hUVl7VahsXkikMcPAq0W0HCoTjGTY"
+  crossorigin="anonymous"
+></script>
+<script>
+  // Guarded: ad blockers commonly block Sentry's own CDN, so don't let a
+  // blocked/failed script load throw an error of its own.
+  if (window.Sentry) {
+    Sentry.init({
+      dsn: "https://6d5f03f38291c09fbee4383390cf3a47@o4512073383804928.ingest.de.sentry.io/4512073554329680",
+      environment: "production",
+      initialScope: { tags: { app: "farmer" } },
+    });
+  }
+</script>
 <link rel="manifest" href="/manifest-farmer.json" />
 <meta name="theme-color" content="#FFC244" />
 <link rel="icon" href="/icons/farmer/icon-192.png" />
