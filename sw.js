@@ -20,16 +20,18 @@ const CACHEABLE_CROSS_ORIGIN_HOSTS = [
 self.addEventListener('install', (event) => {
   self.skipWaiting();
   // scope is the exact app page this worker was registered for
-  // (e.g. "/farmer-app.html" or "/buyer-app.html") — each app has its own
-  // icon set, so precache the matching one rather than a shared fallback.
+  // (e.g. "/farmer-app.html", "/buyer-app.html", "/transporter-app.html") —
+  // farmer and buyer have their own icon set; transporter uses the shared
+  // top-level /icons/ set (no dedicated art yet) rather than a missing folder.
   const shellUrl = self.registration.scope;
-  const iconFolder = shellUrl.includes('buyer-app') ? 'buyer' : 'farmer';
+  const iconFolder = shellUrl.includes('buyer-app') ? 'buyer' : shellUrl.includes('transporter-app') ? null : 'farmer';
+  const iconPath = (name) => iconFolder ? `/icons/${iconFolder}/${name}` : `/icons/${name}`;
   event.waitUntil(
     caches.open(CACHE_VERSION).then((cache) =>
       cache.addAll([
         shellUrl,
-        `/icons/${iconFolder}/icon-192.png`,
-        `/icons/${iconFolder}/icon-512.png`,
+        iconPath('icon-192.png'),
+        iconPath('icon-512.png'),
       ]).catch(() => {
         // Best-effort: if a resource fails to precache (e.g. offline
         // install), don't block install of the rest.
@@ -113,11 +115,12 @@ self.addEventListener('push', (event) => {
   }
 
   const title = data.title || 'Shambani';
-  const iconFolder = self.registration.scope.includes('buyer-app') ? 'buyer' : 'farmer';
+  const iconFolder = self.registration.scope.includes('buyer-app') ? 'buyer' : self.registration.scope.includes('transporter-app') ? null : 'farmer';
+  const iconPath = iconFolder ? `/icons/${iconFolder}/icon-192.png` : '/icons/icon-192.png';
   const options = {
     body: data.body || '',
-    icon: `/icons/${iconFolder}/icon-192.png`,
-    badge: `/icons/${iconFolder}/icon-192.png`,
+    icon: iconPath,
+    badge: iconPath,
     data: { url: data.url || self.registration.scope },
   };
 

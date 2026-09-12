@@ -1,0 +1,1227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Shambani Transporter App</title>
+<!-- Sentry error tracking — loaded first so it can catch errors from everything below -->
+<script
+  src="https://browser.sentry-cdn.com/10.74.0/bundle.min.js"
+  integrity="sha384-ekhFYbUiD5vrs1pT5Kty50wAgPsq9eoEDo+hUVl7VahsXkikMcPAq0W0HCoTjGTY"
+  crossorigin="anonymous"
+></script>
+<script>
+  // Guarded: ad blockers commonly block Sentry's own CDN, so don't let a
+  // blocked/failed script load throw an error of its own.
+  if (window.Sentry) {
+    Sentry.init({
+      dsn: "https://6d5f03f38291c09fbee4383390cf3a47@o4512073383804928.ingest.de.sentry.io/4512073554329680",
+      environment: "production",
+      initialScope: { tags: { app: "transporter" } },
+    });
+  }
+</script>
+<!-- PostHog product analytics — EU cloud region -->
+<script>
+  !function (t, e) {
+    var o, n, p, r;
+    e.__SV ||
+      ((window.posthog = e),
+      (e._i = []),
+      (e.init = function (i, s, a) {
+        function g(t, e) {
+          var o = e.split(".");
+          2 == o.length && ((t = t[o[0]]), (e = o[1])),
+            (t[e] = function () {
+              t.push([e].concat(Array.prototype.slice.call(arguments, 0)));
+            });
+        }
+        ((p = t.createElement("script")).type = "text/javascript"),
+          (p.crossOrigin = "anonymous"),
+          (p.async = !0),
+          (p.src =
+            s.api_host.replace(".i.posthog.com", "-assets.i.posthog.com") +
+            "/static/array.js"),
+          (r = t.getElementsByTagName("script")[0]).parentNode.insertBefore(
+            p,
+            r
+          );
+        var u = e;
+        for (
+          void 0 !== a ? (u = e[a] = []) : (a = "posthog"),
+            u.people = u.people || [],
+            u.toString = function (t) {
+              var e = "posthog";
+              return (
+                "posthog" !== a && (e += "." + a), t || (e += " (stub)"), e
+              );
+            },
+            u.people.toString = function () {
+              return u.toString(1) + ".people (stub)";
+            },
+            o =
+              "init me ws ys ps bs capture je Di ks register register_once register_for_session unregister unregister_for_session Ps getFeatureFlag getFeatureFlagPayload isFeatureEnabled reloadFeatureFlags updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures on onFeatureFlags onSurveysLoaded onSessionId getSurveys getActiveMatchingSurveys renderSurvey canRenderSurvey canRenderSurveyAsync identify setPersonProperties group resetGroups setPersonPropertiesForFlags resetPersonPropertiesForFlags setGroupPropertiesForFlags resetGroupPropertiesForFlags reset get_distinct_id getGroups get_session_id get_session_replay_url alias set_config startSessionRecording stopSessionRecording sessionRecordingStarted captureException loadToolbar get_property getSessionProperty createPersonProfile opt_in_capturing opt_out_capturing has_opted_in_capturing has_opted_out_capturing clear_opt_in_out_capturing debug".split(
+                " "
+              ),
+            n = 0;
+          n < o.length;
+          n++
+        )
+          g(u, o[n]);
+        e._i.push([i, s, a]);
+      }),
+      (e.__SV = 1));
+  }(document, window.posthog || []);
+  if (window.posthog) {
+    posthog.init("phc_wzvDDBUhFkwD5crvqYJWGBaQRUexqJ9XYNg8TY3tYTf3", {
+      api_host: "https://eu.i.posthog.com",
+      ui_host: "https://eu.posthog.com",
+      person_profiles: "identified_only",
+      loaded: function (ph) {
+        ph.register({ app: "transporter" });
+      },
+    });
+  }
+</script>
+<link rel="manifest" href="/manifest-transporter.json" />
+<meta name="theme-color" content="#1A1A1A" />
+<link rel="icon" href="/icons/icon-192.png" />
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+<meta name="apple-mobile-web-app-title" content="Shamba Transport" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --yellow:#FFC244;
+    --yellow-dark:#F0A82E;
+    --ink:#1A1A1A;
+    --white:#FFFFFF;
+    --bg:#FAFAF7;
+    --green:#2E7D46;
+    --green-bg:#E8F5EC;
+    --slate:#6B6B6B;
+    --line:#EDEDEA;
+    --red:#C1462F;
+    --radius-lg:20px;
+    --radius-md:14px;
+    --radius-sm:10px;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;}
+  body{
+    font-family:'Inter',system-ui,-apple-system,sans-serif;
+    color:var(--ink);
+    display:flex;
+    justify-content:center;
+    align-items:stretch;
+    min-height:100vh;
+    background:var(--bg);
+  }
+  h1,h2,h3,.display{ font-family:'Poppins',system-ui,sans-serif; }
+
+  .app-frame{
+    width:100%;
+    max-width:480px;
+    height:100vh;
+    height:100dvh;
+    background:var(--bg);
+    position:relative;
+  }
+  @media (min-width:900px){
+    body{ background:#F3EFE3; }
+    .app-frame{ box-shadow:0 0 0 1px rgba(26,26,26,.06); }
+  }
+
+  .screen{
+    display:none;
+    flex-direction:column;
+    height:100%;
+    overflow:hidden;
+    animation:fadeIn .25s ease;
+  }
+  .screen.active{ display:flex; }
+  @keyframes fadeIn{ from{opacity:0} to{opacity:1} }
+
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+  .spinner-ring{
+    width:34px; height:34px; border-radius:50%;
+    border:3px solid rgba(26,26,26,.1); border-top-color:var(--ink);
+    animation:spin .7s linear infinite;
+  }
+  #screen-splash{ align-items:center; justify-content:center; }
+  #screen-splash .brand-mark{ margin:0 auto 22px; }
+  #screen-splash .spinner-ring{ margin:0 auto; }
+  .loading-state{
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    padding:48px 20px; color:var(--slate); gap:14px;
+  }
+  .loading-state .spinner-ring{ width:26px; height:26px; border-width:2.5px; }
+  .loading-state span{ font-size:13px; font-weight:600; }
+
+  .screen-body{
+    flex:1; min-height:0;
+    overflow-y:auto;
+    -ms-overflow-style:none;
+    scrollbar-width:none;
+    -webkit-overflow-scrolling:touch;
+    padding:20px 20px 100px 20px;
+  }
+  .screen-body::-webkit-scrollbar{ display:none; }
+  .screen-body.no-pad-bottom{ padding-bottom:24px; }
+
+  .top-header, .sub-header, .onboard-header, .login-hero, .filter-row{ flex-shrink:0; }
+
+  .top-header{ padding:8px 20px 18px 20px; }
+  .top-header .eyebrow{ font-size:13px; color:var(--slate); margin:0 0 2px 0; font-weight:500;}
+  .top-header h1{ font-size:22px; margin:0; font-weight:700; }
+  .top-header .sub-loc{ display:flex; align-items:center; gap:6px; margin-top:6px; font-size:13px; color:var(--slate); font-weight:500;}
+
+  .btn{
+    display:flex; align-items:center; justify-content:center; gap:8px;
+    border:none; border-radius:100px; font-family:'Poppins',sans-serif;
+    font-weight:600; font-size:15px; cursor:pointer; transition:transform .12s ease;
+    -webkit-user-select:none; user-select:none;
+  }
+  .btn:active{ transform:scale(.97); }
+  .btn-primary{ background:var(--yellow); color:var(--ink); padding:16px 20px; width:100%; }
+  .btn-primary:disabled{ background:#F3E3C1; color:#B9A374; cursor:not-allowed; }
+  .btn-dark{ background:var(--ink); color:var(--white); padding:16px 20px; width:100%; }
+  .btn-ghost{ background:transparent; color:var(--ink); padding:14px 18px; width:100%; border:1.5px solid var(--line); }
+  .btn-sm{ padding:10px 16px; font-size:13px; }
+
+  .field{ margin-bottom:16px; }
+  .field label{ display:block; font-size:13px; font-weight:600; margin-bottom:7px; color:var(--ink); }
+  .hint{ font-size:12px; color:var(--slate); margin-top:6px; font-weight:400; }
+  .field input[type=text], .field input[type=email], .field input[type=password], .field input[type=tel], .field input[type=number], .field select{
+    width:100%; padding:14px 15px; border-radius:var(--radius-sm); border:1.5px solid var(--line);
+    background:var(--white); font-family:'Inter',sans-serif; font-size:15px; color:var(--ink); font-weight:500;
+    box-sizing:border-box;
+  }
+  .field input:focus, .field select:focus{ outline:none; border-color:var(--yellow-dark); }
+  .input-row{ display:flex; gap:10px; }
+  .input-row .field{ flex:1; }
+
+  .input-icon-wrap{ position:relative; }
+  .input-icon-wrap .field-icon{ position:absolute; left:15px; top:50%; transform:translateY(-50%); pointer-events:none; }
+  .input-icon-wrap input{ padding-left:44px !important; }
+  .input-icon-wrap input[type=password]{ padding-right:44px !important; }
+  .input-icon-wrap .toggle-visibility{
+    position:absolute; right:6px; top:50%; transform:translateY(-50%);
+    background:none; border:none; padding:8px; cursor:pointer; display:flex; align-items:center; justify-content:center;
+  }
+
+  .chip-group{ display:flex; flex-wrap:wrap; gap:9px; }
+  .chip{
+    padding:10px 16px; border-radius:100px; border:1.5px solid var(--line); background:var(--white);
+    font-size:13.5px; font-weight:600; cursor:pointer; color:var(--ink); display:flex; align-items:center; gap:6px;
+  }
+  .chip.selected{ background:var(--ink); border-color:var(--ink); color:var(--white); }
+
+  .card{ background:var(--white); border-radius:var(--radius-md); border:1px solid var(--line); }
+
+  .badge{ font-size:11px; font-weight:700; padding:5px 10px; border-radius:100px; white-space:nowrap; }
+  .badge.requested{ background:#FFF2DA; color:#9A6B12; }
+  .badge.assigned{ background:var(--green-bg); color:var(--green); }
+  .badge.pickedup{ background:var(--green-bg); color:var(--green); }
+  .badge.intransit{ background:var(--green-bg); color:var(--green); }
+  .badge.delivered{ background:#EFEFEF; color:var(--slate); }
+  .badge.cancelled{ background:#EFEFEF; color:var(--slate); }
+
+  .progress-track{ height:5px; background:var(--line); border-radius:100px; overflow:hidden; margin-top:9px; }
+  .progress-fill{ height:100%; background:var(--yellow); border-radius:100px; }
+  .progress-label{ font-size:11px; color:var(--slate); font-weight:600; margin-top:5px; }
+
+  .unread-dot{
+    position:absolute; top:-7px; left:-7px;
+    min-width:22px; height:22px; padding:0 6px;
+    border-radius:100px; background:var(--red); color:#fff;
+    font-size:11.5px; font-weight:700; font-family:'Poppins',sans-serif;
+    display:flex; align-items:center; justify-content:center;
+    border:2px solid var(--bg);
+  }
+
+  .connect-card{ background:var(--green-bg); border:1px solid #CFE9D5; border-radius:var(--radius-sm); padding:14px; margin-top:12px; }
+  .connect-title{ display:flex; align-items:center; gap:6px; font-family:'Poppins',sans-serif; font-weight:700; font-size:13.5px; color:var(--green); margin-bottom:8px; }
+  .connect-phone{ font-size:14px; font-weight:700; margin-bottom:12px; }
+  .wa-btn{
+    display:flex; align-items:center; justify-content:center; gap:8px;
+    background:#25D366; color:#fff; border:none; border-radius:100px;
+    padding:12px 16px; font-family:'Poppins',sans-serif; font-weight:600; font-size:13.5px;
+    text-decoration:none; width:100%; box-sizing:border-box; margin-bottom:12px;
+  }
+
+  .icon{ width:20px; height:20px; display:inline-block; flex-shrink:0; }
+
+  /* ---------- Login ---------- */
+  .login-hero{ width:100%; height:190px; display:block; overflow:hidden; flex-shrink:0; }
+  .login-hero svg{ width:100%; height:100%; display:block; }
+  #screen-login .screen-body{ display:flex; flex-direction:column; justify-content:center; padding:22px 26px; }
+  .brand-mark{
+    width:52px; height:52px; border-radius:15px; background:var(--yellow);
+    display:flex; align-items:center; justify-content:center; margin-top:-48px; margin-bottom:18px;
+    box-shadow:0 8px 20px rgba(0,0,0,.12); position:relative; z-index:2;
+  }
+  .login-title{ font-size:26px; font-weight:700; margin:0 0 8px 0; line-height:1.25; }
+  .login-sub{ font-size:14.5px; color:var(--slate); margin:0 0 30px 0; line-height:1.5; }
+  .auth-error{ display:none; background:#FBEAE6; color:var(--red); font-size:13px; font-weight:600; padding:12px 14px; border-radius:var(--radius-sm); margin-bottom:16px; }
+  .auth-toggle{ text-align:center; font-size:13.5px; color:var(--slate); margin-top:18px; }
+  .auth-toggle a{ color:var(--ink); font-weight:700; text-decoration:none; }
+  .forgot-link{ text-align:right; font-size:12.5px; font-weight:600; color:var(--slate); margin:-8px 0 18px 0; cursor:pointer; }
+
+  /* ---------- Onboarding ---------- */
+  .onboard-header{ padding:16px 20px 6px 20px; }
+  .step-label{ font-size:12.5px; font-weight:700; color:var(--yellow-dark); text-transform:uppercase; letter-spacing:.4px; margin-bottom:6px; }
+  .step-title{ font-size:20px; font-weight:700; margin:0 0 4px 0; }
+  .step-desc{ font-size:13.5px; color:var(--slate); margin:0 0 22px 0; line-height:1.5; }
+  .onboard-nav{ display:flex; gap:10px; padding:14px 20px 22px 20px; background:var(--bg); position:sticky; bottom:0; }
+  .onboard-nav .btn-primary{ flex:1; }
+
+  /* ---------- Home / stats ---------- */
+  .stat-row{ display:flex; gap:10px; margin-bottom:18px; }
+  .stat-card{ flex:1; background:var(--white); border:1px solid var(--line); border-radius:var(--radius-md); padding:14px; }
+  .stat-card .stat-num{ font-family:'Poppins',sans-serif; font-size:22px; font-weight:700; }
+  .stat-card .stat-label{ font-size:11.5px; color:var(--slate); font-weight:600; margin-top:2px; }
+
+  .section-heading{ display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+  .section-heading h3{ font-size:16px; margin:0; font-weight:700; }
+
+  .job-card{ padding:14px; margin-bottom:12px; cursor:pointer; position:relative; }
+  .job-top{ display:flex; justify-content:space-between; align-items:flex-start; gap:8px; }
+  .job-crop{ font-weight:700; font-size:14.5px; }
+  .job-route{ font-size:12.5px; color:var(--slate); margin-top:6px; display:flex; align-items:center; gap:6px; }
+  .job-route .arrow{ color:#B7B4A9; }
+  .job-meta-row{ display:flex; justify-content:space-between; align-items:center; margin-top:10px; font-size:13px; }
+  .job-meta-row .qty{ color:var(--slate); }
+  .job-meta-row .fee{ font-weight:700; font-family:'Poppins',sans-serif; }
+
+  .empty-state{ text-align:center; padding:36px 20px; color:var(--slate); }
+  .empty-state .icon-wrap{ width:56px; height:56px; border-radius:50%; background:var(--white); border:1px solid var(--line); display:flex; align-items:center; justify-content:center; margin:0 auto 14px auto; }
+  .empty-state strong{ display:block; color:var(--ink); font-size:14.5px; margin-bottom:4px; }
+  .empty-state p{ font-size:13px; margin:0; line-height:1.5; }
+
+  /* ---------- Bottom nav ---------- */
+  .bottom-nav{
+    position:absolute; left:0; right:0; bottom:0;
+    background:var(--white); border-top:1px solid var(--line);
+    display:flex; align-items:center; justify-content:space-around;
+    padding:10px 6px calc(10px + env(safe-area-inset-bottom)) 6px; z-index:5;
+  }
+  .nav-item{ display:flex; flex-direction:column; align-items:center; gap:4px; cursor:pointer; padding:4px 10px; }
+  .nav-item span{ font-size:10.5px; font-weight:600; color:#B7B4A9; }
+  .nav-item.active span{ color:var(--ink); }
+
+  .sub-header{ display:flex; align-items:center; gap:14px; padding:16px 20px 8px 20px; }
+  .back-circle{ width:36px; height:36px; border-radius:50%; background:var(--white); border:1px solid var(--line); display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0;}
+  .sub-header h2{ font-size:17px; margin:0; font-weight:700; }
+
+  .filter-row{ display:flex; gap:8px; padding:12px 20px 4px 20px; flex-wrap:wrap; }
+  .filter-pill{ padding:8px 14px; border-radius:100px; border:1px solid var(--line); background:var(--white); font-size:12.5px; font-weight:700; color:var(--slate); cursor:pointer; white-space:nowrap; }
+  .filter-pill.active{ background:var(--ink); color:var(--white); border-color:var(--ink); }
+
+  .detail-body{
+    flex:1; min-height:0; overflow-y:auto;
+    -ms-overflow-style:none; scrollbar-width:none; -webkit-overflow-scrolling:touch;
+    padding:20px;
+  }
+  .detail-body::-webkit-scrollbar{ display:none; }
+  .detail-title{ font-size:21px; font-weight:700; margin:0 0 4px 0; }
+  .detail-sub{ font-size:13px; color:var(--slate); margin-bottom:18px; }
+  .detail-grid{ display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:20px; }
+  .detail-stat{ background:var(--white); border:1px solid var(--line); border-radius:var(--radius-sm); padding:12px 14px; }
+  .detail-stat .lbl{ font-size:11.5px; color:var(--slate); font-weight:600; margin-bottom:4px; }
+  .detail-stat .val{ font-size:14.5px; font-weight:700; font-family:'Poppins',sans-serif; }
+
+  .party-card{ background:var(--white); border:1px solid var(--line); border-radius:var(--radius-sm); padding:14px; margin-bottom:12px; }
+  .party-card .role{ font-size:11px; font-weight:700; color:var(--slate); text-transform:uppercase; letter-spacing:.3px; margin-bottom:6px; }
+  .party-card .nm{ font-weight:700; font-size:14px; }
+  .party-card .loc{ font-size:12.5px; color:var(--slate); margin-top:2px; }
+
+  /* ---------- Profile ---------- */
+  .profile-head{ display:flex; align-items:center; gap:14px; padding:8px 20px 20px 20px; }
+  .avatar{ width:60px; height:60px; border-radius:50%; background:var(--yellow); display:flex; align-items:center; justify-content:center; font-family:'Poppins',sans-serif; font-weight:700; font-size:22px; flex-shrink:0; }
+  .profile-name{ font-size:17px; font-weight:700; }
+  .profile-loc{ font-size:12.5px; color:var(--slate); margin-top:3px; }
+  .verify-badge{ display:inline-flex; align-items:center; gap:4px; background:var(--green-bg); color:var(--green); font-size:11px; font-weight:700; padding:4px 9px; border-radius:100px; margin-top:6px;}
+
+  .info-row{ display:flex; justify-content:space-between; align-items:center; padding:14px 0; border-bottom:1px solid var(--line); }
+  .info-row:last-child{ border-bottom:none; }
+  .info-row .lbl{ font-size:13.5px; color:var(--slate); font-weight:500; }
+  .info-row .val{ font-size:13.5px; font-weight:700; text-align:right; max-width:60%; }
+
+  .toast{
+    position:absolute; left:20px; right:20px; bottom:96px; background:var(--ink); color:var(--white);
+    padding:14px 16px; border-radius:var(--radius-sm); font-size:13.5px; font-weight:600; display:flex; align-items:center; gap:10px;
+    opacity:0; transform:translateY(10px); pointer-events:none; transition:all .25s ease; z-index:20;
+  }
+  .toast.show{ opacity:1; transform:translateY(0); }
+</style>
+</head>
+<body>
+<div class="app-frame">
+
+  <!-- ===================== SPLASH ===================== -->
+  <div class="screen active" id="screen-splash">
+    <div class="brand-mark">
+      <svg class="icon" style="width:26px;height:26px" viewBox="0 0 24 24" fill="none"><path d="M3 16l6-6 4 4 8-9" stroke="#1A1A1A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </div>
+    <div class="spinner-ring"></div>
+  </div>
+
+  <!-- ===================== LOGIN ===================== -->
+  <div class="screen" id="screen-login">
+    <div class="screen-body">
+      <div class="brand-mark" style="margin-top:0;">
+        <svg class="icon" style="width:26px;height:26px" viewBox="0 0 24 24" fill="none"><path d="M3 16l6-6 4 4 8-9" stroke="#1A1A1A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <h1 class="login-title" id="authTitle">Drive with Shambani</h1>
+      <p class="login-sub" id="authSub">Pick up open delivery jobs between farmers and buyers, and get paid per job.</p>
+      <div class="auth-error" id="authError"></div>
+      <div class="field">
+        <label>Email</label>
+        <input type="email" id="authEmail" placeholder="you@example.com" />
+      </div>
+      <div class="field">
+        <label>Password</label>
+        <div class="input-icon-wrap">
+          <input type="password" id="authPassword" placeholder="••••••••" />
+          <button type="button" class="toggle-visibility" id="pwToggleBtn" onclick="togglePasswordVisibility('authPassword','pwToggleBtn')" aria-label="Show password">
+            <svg class="icon" viewBox="0 0 24 24" fill="none"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" stroke="#9A968A" stroke-width="1.6"/><circle cx="12" cy="12" r="3" stroke="#9A968A" stroke-width="1.6"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="forgot-link" id="forgotPasswordRow" style="display:none;" onclick="openForgotPassword()">Forgot password?</div>
+      <button class="btn btn-primary" id="authSubmitBtn" onclick="handleAuthSubmit()">Create account</button>
+      <div class="auth-toggle"><span id="authToggleText">Already have an account?</span> <a onclick="toggleAuthMode()" id="authToggleLink">Sign in</a></div>
+    </div>
+  </div>
+
+  <!-- ===================== FORGOT PASSWORD ===================== -->
+  <div class="screen" id="screen-forgot-password">
+    <div class="sub-header">
+      <div class="back-circle" onclick="goToScreen('screen-login')">
+        <svg class="icon" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="#1A1A1A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <h2>Reset password</h2>
+    </div>
+    <div class="screen-body">
+      <div id="forgotPasswordForm">
+        <p class="hint" style="margin-bottom:18px;">Enter your email and we'll send you a reset link.</p>
+        <div class="auth-error" id="forgotError"></div>
+        <div class="field">
+          <label>Email</label>
+          <input type="email" id="forgotEmail" placeholder="you@example.com" />
+        </div>
+        <button class="btn btn-primary" id="forgotSubmitBtn" onclick="sendPasswordReset()">Send reset link</button>
+      </div>
+      <div id="forgotPasswordSent" style="display:none; text-align:center; padding-top:20px;">
+        <strong>Check your email</strong>
+        <p class="hint">We sent a reset link to <span id="forgotEmailSentTo"></span>.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== ONBOARDING ===================== -->
+  <div class="screen" id="screen-ob1">
+    <div class="onboard-header">
+      <div class="back-circle" style="margin-bottom:14px;" onclick="abandonSignup()">
+        <svg class="icon" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="#1A1A1A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="step-label">Transporter profile</div>
+      <h2 class="step-title">Tell us about your vehicle</h2>
+      <p class="step-desc">Buyers and farmers will see this when you accept a job.</p>
+    </div>
+    <div class="screen-body">
+      <div class="field">
+        <label>Full name</label>
+        <input type="text" id="obName" placeholder="e.g. Juma Hassan" />
+      </div>
+      <div class="field">
+        <label>Phone number</label>
+        <input type="tel" id="obPhone" placeholder="e.g. 0712 345 678" />
+      </div>
+      <div class="field">
+        <label>Vehicle type</label>
+        <div class="chip-group" id="vehicleChips">
+          <div class="chip selected" data-type="Motorcycle">Motorcycle</div>
+          <div class="chip" data-type="Pickup">Pickup</div>
+          <div class="chip" data-type="Small truck">Small truck</div>
+          <div class="chip" data-type="Large truck">Large truck</div>
+        </div>
+      </div>
+      <div class="input-row">
+        <div class="field">
+          <label>Capacity</label>
+          <input type="number" id="obCapacity" placeholder="e.g. 1000" />
+        </div>
+        <div class="field">
+          <label>Unit</label>
+          <select id="obCapacityUnit"><option>kg</option><option>tonnes</option></select>
+        </div>
+      </div>
+      <div class="input-row">
+        <div class="field">
+          <label>Region</label>
+          <select id="obRegion">
+            <option>Arusha</option><option>Kilimanjaro</option><option>Manyara</option>
+            <option>Dodoma</option><option>Mbeya</option><option>Iringa</option><option>Morogoro</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>District</label>
+          <input type="text" id="obDistrict" placeholder="e.g. Arumeru" />
+        </div>
+      </div>
+    </div>
+    <div class="onboard-nav">
+      <button class="btn btn-primary" onclick="finishOnboarding()">Start finding jobs</button>
+    </div>
+  </div>
+
+  <!-- ===================== HOME (open jobs board) ===================== -->
+  <div class="screen" id="screen-home">
+    <div class="top-header">
+      <p class="eyebrow">Good to see you</p>
+      <h1 id="homeGreeting">Available jobs</h1>
+    </div>
+    <div class="screen-body">
+      <div class="stat-row">
+        <div class="stat-card">
+          <div class="stat-num" id="statOpenJobs">0</div>
+          <div class="stat-label">Open jobs</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-num" id="statActiveJobs">0</div>
+          <div class="stat-label">Your active jobs</div>
+        </div>
+      </div>
+      <div class="section-heading"><h3>Open delivery jobs</h3></div>
+      <div id="openJobsWrap"></div>
+    </div>
+    <div class="bottom-nav">
+      <div class="nav-item active" data-nav="home" onclick="goToScreen('screen-home')">
+        <svg class="icon" viewBox="0 0 24 24" fill="none"><path d="M4 11l8-7 8 7v9a1 1 0 01-1 1h-4v-6H9v6H5a1 1 0 01-1-1v-9z" stroke="currentColor" stroke-width="1.7"/></svg>
+        <span>Jobs</span>
+      </div>
+      <div class="nav-item" data-nav="my-jobs" onclick="goToScreen('screen-my-jobs')">
+        <svg class="icon" viewBox="0 0 24 24" fill="none"><path d="M3 7h18M3 12h18M3 17h18" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+        <span>My Jobs</span>
+      </div>
+      <div class="nav-item" data-nav="profile" onclick="goToScreen('screen-profile')">
+        <svg class="icon" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="1.7"/><path d="M4 20c0-3.5 3.5-6 8-6s8 2.5 8 6" stroke="currentColor" stroke-width="1.7"/></svg>
+        <span>Profile</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== MY JOBS ===================== -->
+  <div class="screen" id="screen-my-jobs">
+    <div class="top-header">
+      <p class="eyebrow">Assigned to you</p>
+      <h1>My jobs</h1>
+    </div>
+    <div class="filter-row" id="myJobsFilterRow">
+      <div class="filter-pill active" data-filter="Active" onclick="setMyJobsFilter('Active')">Active</div>
+      <div class="filter-pill" data-filter="Delivered" onclick="setMyJobsFilter('Delivered')">Delivered</div>
+      <div class="filter-pill" data-filter="Cancelled" onclick="setMyJobsFilter('Cancelled')">Cancelled</div>
+    </div>
+    <div class="screen-body">
+      <div id="myJobsWrap"></div>
+    </div>
+    <div class="bottom-nav">
+      <div class="nav-item" data-nav="home" onclick="goToScreen('screen-home')">
+        <svg class="icon" viewBox="0 0 24 24" fill="none"><path d="M4 11l8-7 8 7v9a1 1 0 01-1 1h-4v-6H9v6H5a1 1 0 01-1-1v-9z" stroke="currentColor" stroke-width="1.7"/></svg>
+        <span>Jobs</span>
+      </div>
+      <div class="nav-item active" data-nav="my-jobs" onclick="goToScreen('screen-my-jobs')">
+        <svg class="icon" viewBox="0 0 24 24" fill="none"><path d="M3 7h18M3 12h18M3 17h18" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+        <span>My Jobs</span>
+      </div>
+      <div class="nav-item" data-nav="profile" onclick="goToScreen('screen-profile')">
+        <svg class="icon" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="1.7"/><path d="M4 20c0-3.5 3.5-6 8-6s8 2.5 8 6" stroke="currentColor" stroke-width="1.7"/></svg>
+        <span>Profile</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== JOB DETAIL ===================== -->
+  <div class="screen" id="screen-job-detail">
+    <div class="sub-header">
+      <div class="back-circle" onclick="goToScreen(state.detailFrom || 'screen-home')">
+        <svg class="icon" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="#1A1A1A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <h2>Job details</h2>
+    </div>
+    <div class="detail-body">
+      <h1 class="detail-title" id="jdCrop"></h1>
+      <p class="detail-sub" id="jdRoute"></p>
+      <div class="detail-grid">
+        <div class="detail-stat"><div class="lbl">Quantity</div><div class="val" id="jdQty"></div></div>
+        <div class="detail-stat"><div class="lbl">Status</div><div class="val" id="jdStatus"></div></div>
+      </div>
+
+      <div id="jdPartiesWrap"></div>
+
+      <div id="jdUnassignedWrap" style="display:none;">
+        <div class="field">
+          <label>Your delivery fee (TZS)</label>
+          <input type="number" id="jdFeeInput" placeholder="e.g. 15000" />
+          <p class="hint" id="jdCommissionHint"></p>
+        </div>
+        <button class="btn btn-primary" onclick="acceptJob()">Accept job</button>
+      </div>
+
+      <div id="jdAssignedWrap" style="display:none;">
+        <div class="detail-grid">
+          <div class="detail-stat"><div class="lbl">Delivery fee</div><div class="val" id="jdFee"></div></div>
+          <div class="detail-stat"><div class="lbl">Your payout</div><div class="val" id="jdPayout"></div></div>
+        </div>
+        <button class="btn btn-primary" id="jdActionBtn" onclick="advanceJobStatus()"></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== PROFILE ===================== -->
+  <div class="screen" id="screen-profile">
+    <div class="top-header"><h1>Profile</h1></div>
+    <div class="screen-body">
+      <div class="profile-head">
+        <div class="avatar" id="profileAvatar">?</div>
+        <div>
+          <div class="profile-name" id="profileName"></div>
+          <div class="profile-loc" id="profileLoc"></div>
+          <div class="verify-badge" id="profileVerifyBadge" style="display:none;">
+            <svg class="icon" style="width:12px;height:12px" viewBox="0 0 24 24" fill="none"><path d="M20 6L9 17l-5-5" stroke="#2E7D46" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Verified
+          </div>
+        </div>
+      </div>
+      <div class="card" style="padding:4px 16px; margin-bottom:16px;">
+        <div class="info-row"><span class="lbl">Phone</span><span class="val" id="profilePhone"></span></div>
+        <div class="info-row"><span class="lbl">Vehicle</span><span class="val" id="profileVehicle"></span></div>
+        <div class="info-row"><span class="lbl">Capacity</span><span class="val" id="profileCapacity"></span></div>
+        <div class="info-row"><span class="lbl">Total earned</span><span class="val" id="profileEarnings"></span></div>
+      </div>
+      <div class="card" style="padding:4px 16px; margin-bottom:16px;">
+        <div class="info-row">
+          <span class="lbl">Push notifications</span>
+          <span class="val" style="cursor:pointer; color:var(--yellow-dark);" id="pushNotifStatus" onclick="enablePushNotifications()">Tap to enable</span>
+        </div>
+      </div>
+      <button class="btn btn-ghost" onclick="handleLogout()">Log out</button>
+    </div>
+    <div class="bottom-nav">
+      <div class="nav-item" data-nav="home" onclick="goToScreen('screen-home')">
+        <svg class="icon" viewBox="0 0 24 24" fill="none"><path d="M4 11l8-7 8 7v9a1 1 0 01-1 1h-4v-6H9v6H5a1 1 0 01-1-1v-9z" stroke="currentColor" stroke-width="1.7"/></svg>
+        <span>Jobs</span>
+      </div>
+      <div class="nav-item" data-nav="my-jobs" onclick="goToScreen('screen-my-jobs')">
+        <svg class="icon" viewBox="0 0 24 24" fill="none"><path d="M3 7h18M3 12h18M3 17h18" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+        <span>My Jobs</span>
+      </div>
+      <div class="nav-item active" data-nav="profile" onclick="goToScreen('screen-profile')">
+        <svg class="icon" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="1.7"/><path d="M4 20c0-3.5 3.5-6 8-6s8 2.5 8 6" stroke="currentColor" stroke-width="1.7"/></svg>
+        <span>Profile</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+</div>
+
+<script>
+/* ===================== SUPABASE ===================== */
+const SUPABASE_URL = 'https://xznyqhikkpojzhspokfa.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_w3sdCnlk3FHPPJ4a5EwsIw_sUUHNKf5';
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, { db: { schema: 'marketplace' } });
+let authMode = 'signup';
+
+/* ===================== STATE ===================== */
+const state = {
+  currentScreen: 'screen-login',
+  transporter: { name:'', phone:'', vehicleType:'Motorcycle', vehicleCapacity:'', capacityUnit:'kg', region:'Arusha', district:'', verified:false },
+  openJobs: [],
+  myJobs: [],
+  myJobsFilter: 'Active',
+  currentJobId: null,
+  detailFrom: 'screen-home'
+};
+
+const DELIVERY_STATUS_LABEL = {
+  Requested: 'Open — no transporter yet',
+  Assigned: 'Assigned to you',
+  PickedUp: 'Picked up',
+  InTransit: 'In transit',
+  Delivered: 'Delivered',
+  Cancelled: 'Cancelled'
+};
+// What tapping the primary action button does at each status, and what it
+// becomes next — a simple linear progression a transporter walks through.
+const NEXT_STATUS = { Assigned: 'PickedUp', PickedUp: 'InTransit', InTransit: 'Delivered' };
+const ACTION_LABEL = { Assigned: 'Mark picked up', PickedUp: 'Mark in transit', InTransit: 'Mark delivered' };
+
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.classList.remove('show'), 2600);
+}
+
+function waLink(phone, text){
+  const digits = (phone || '').replace(/[^\d]/g, '');
+  return `https://wa.me/${digits}?text=${encodeURIComponent(text || '')}`;
+}
+
+function loadingStateHtml(){
+  return `<div class="loading-state"><div class="spinner-ring"></div><span>Loading…</span></div>`;
+}
+function emptyStateHtml(msg, sub){
+  return `<div class="empty-state">
+    <div class="icon-wrap"><svg class="icon" style="width:24px;height:24px" viewBox="0 0 24 24" fill="none"><path d="M5 4h14v12H8l-3 3V4z" stroke="#6B6B6B" stroke-width="1.6"/></svg></div>
+    <strong>${msg}</strong>
+    <p>${sub}</p>
+  </div>`;
+}
+
+/* ===================== AUTH ===================== */
+function togglePasswordVisibility(inputId, btnId){
+  const input = document.getElementById(inputId);
+  const btn = document.getElementById(btnId);
+  const showing = input.type === 'text';
+  input.type = showing ? 'password' : 'text';
+  btn.setAttribute('aria-label', showing ? 'Show password' : 'Hide password');
+  btn.querySelector('svg').innerHTML = showing
+    ? '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" stroke="#9A968A" stroke-width="1.6"/><circle cx="12" cy="12" r="3" stroke="#9A968A" stroke-width="1.6"/>'
+    : '<path d="M3 3l18 18" stroke="#9A968A" stroke-width="1.6" stroke-linecap="round"/><path d="M10.6 5.2A10.6 10.6 0 0112 5c6.5 0 10 7 10 7a17.6 17.6 0 01-3.2 4.1M6.5 6.7C3.8 8.4 2 12 2 12s3.5 7 10 7c1.4 0 2.7-.3 3.8-.8" stroke="#9A968A" stroke-width="1.6" stroke-linecap="round"/><path d="M9.9 9.9a3 3 0 004.2 4.2" stroke="#9A968A" stroke-width="1.6" stroke-linecap="round"/>';
+}
+
+function toggleAuthMode(){
+  authMode = authMode === 'signup' ? 'login' : 'signup';
+  document.getElementById('authError').style.display = 'none';
+  if(authMode === 'signup'){
+    document.getElementById('authTitle').textContent = 'Drive with Shambani';
+    document.getElementById('authSub').textContent = 'Pick up open delivery jobs between farmers and buyers, and get paid per job.';
+    document.getElementById('authSubmitBtn').textContent = 'Create account';
+    document.getElementById('authToggleText').textContent = 'Already have an account?';
+    document.getElementById('authToggleLink').textContent = 'Sign in';
+    document.getElementById('forgotPasswordRow').style.display = 'none';
+  } else {
+    document.getElementById('authTitle').textContent = 'Welcome back';
+    document.getElementById('authSub').textContent = 'Sign in to see open jobs and manage your deliveries.';
+    document.getElementById('authSubmitBtn').textContent = 'Sign in';
+    document.getElementById('authToggleText').textContent = 'New here?';
+    document.getElementById('authToggleLink').textContent = 'Create an account';
+    document.getElementById('forgotPasswordRow').style.display = 'block';
+  }
+}
+
+function openForgotPassword(){
+  document.getElementById('forgotEmail').value = document.getElementById('authEmail').value.trim();
+  document.getElementById('forgotError').style.display = 'none';
+  document.getElementById('forgotPasswordForm').style.display = 'block';
+  document.getElementById('forgotPasswordSent').style.display = 'none';
+  document.getElementById('forgotSubmitBtn').style.display = 'block';
+  goToScreen('screen-forgot-password');
+}
+
+async function sendPasswordReset(){
+  const email = document.getElementById('forgotEmail').value.trim();
+  const errEl = document.getElementById('forgotError');
+  errEl.style.display = 'none';
+  if(!email){ errEl.textContent = 'Enter your email'; errEl.style.display = 'block'; return; }
+
+  const btn = document.getElementById('forgotSubmitBtn');
+  btn.disabled = true;
+  const { error } = await sb.auth.resetPasswordForEmail(email, {
+    redirectTo: `${window.location.origin}/reset-password.html?app=transporter`
+  });
+  btn.disabled = false;
+  if(error){ errEl.textContent = error.message; errEl.style.display = 'block'; return; }
+
+  document.getElementById('forgotEmailSentTo').textContent = email;
+  document.getElementById('forgotPasswordForm').style.display = 'none';
+  document.getElementById('forgotPasswordSent').style.display = 'block';
+  btn.style.display = 'none';
+}
+
+function showAuthError(msg){
+  const el = document.getElementById('authError');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+async function handleAuthSubmit(){
+  const email = document.getElementById('authEmail').value.trim();
+  const password = document.getElementById('authPassword').value.trim();
+  document.getElementById('authError').style.display = 'none';
+  if(!email || !password){ showAuthError('Enter your email and password'); return; }
+
+  const btn = document.getElementById('authSubmitBtn');
+  btn.disabled = true;
+
+  if(authMode === 'signup'){
+    const { data, error } = await sb.auth.signUp({ email, password });
+    btn.disabled = false;
+    if(error){ showAuthError(error.message); return; }
+    if(!data.session){
+      showToast('Check your email to confirm your account, then sign in');
+      toggleAuthMode();
+      return;
+    }
+    goToScreen('screen-ob1');
+  } else {
+    const { data, error } = await sb.auth.signInWithPassword({ email, password });
+    btn.disabled = false;
+    if(error){ showAuthError(error.message); return; }
+    await loadTransporterAndEnter();
+  }
+}
+
+async function handleLogout(){
+  await sb.auth.signOut();
+  teardownRealtime();
+  state.transporter = { name:'', phone:'', vehicleType:'Motorcycle', vehicleCapacity:'', capacityUnit:'kg', region:'Arusha', district:'', verified:false };
+  state.openJobs = []; state.myJobs = [];
+  document.getElementById('authEmail').value = '';
+  document.getElementById('authPassword').value = '';
+  goToScreen('screen-login');
+}
+
+async function abandonSignup(){
+  await sb.auth.signOut();
+  document.getElementById('authEmail').value = '';
+  document.getElementById('authPassword').value = '';
+  goToScreen('screen-login');
+}
+
+/* ===================== ONBOARDING ===================== */
+document.getElementById('vehicleChips').addEventListener('click', e => {
+  const chip = e.target.closest('.chip'); if(!chip) return;
+  document.querySelectorAll('#vehicleChips .chip').forEach(c => c.classList.remove('selected'));
+  chip.classList.add('selected');
+});
+
+async function finishOnboarding(){
+  const name = document.getElementById('obName').value.trim();
+  const phone = document.getElementById('obPhone').value.trim();
+  const vehicleChip = document.querySelector('#vehicleChips .chip.selected');
+  const vehicleType = vehicleChip ? vehicleChip.dataset.type : 'Motorcycle';
+  const capacity = document.getElementById('obCapacity').value;
+  const capacityUnit = document.getElementById('obCapacityUnit').value;
+  const region = document.getElementById('obRegion').value;
+  const district = document.getElementById('obDistrict').value.trim() || '-';
+
+  if(!name){ showToast('Please enter your name'); return; }
+  if(!phone){ showToast('Please enter your phone number'); return; }
+
+  const { data: { user } } = await sb.auth.getUser();
+  if(!user){ showToast('Session expired, please sign in again'); goToScreen('screen-login'); return; }
+
+  const { error } = await sb.from('transporters').upsert({
+    id: user.id,
+    name, phone,
+    vehicle_type: vehicleType,
+    vehicle_capacity: capacity ? Number(capacity) : null,
+    capacity_unit: capacityUnit,
+    region, district
+  });
+
+  if(error){ showToast('Could not save profile: ' + error.message); return; }
+
+  state.transporter = { name, phone, vehicleType, vehicleCapacity: capacity, capacityUnit, region, district, verified: false };
+  setupRealtime();
+  showToast('Profile saved!');
+  goToScreen('screen-home');
+}
+
+/* ===================== LOAD DATA ===================== */
+function transporterRowToState(row){
+  return {
+    name: row.name, phone: row.phone,
+    vehicleType: row.vehicle_type, vehicleCapacity: row.vehicle_capacity,
+    capacityUnit: row.capacity_unit, region: row.region, district: row.district,
+    verified: row.verified
+  };
+}
+
+async function loadTransporterAndEnter(){
+  const { data: { user } } = await sb.auth.getUser();
+  if(!user){ goToScreen('screen-login'); return; }
+
+  const { data: row, error } = await sb.from('transporters').select('*').eq('id', user.id).maybeSingle();
+  if(error){ showToast('Could not load your profile'); goToScreen('screen-login'); return; }
+
+  if(!row){ goToScreen('screen-ob1'); return; }
+
+  state.transporter = transporterRowToState(row);
+  setupRealtime();
+  goToScreen('screen-home');
+}
+
+// Every open job on the board — any delivery still looking for a
+// transporter. RLS already scopes this to Requested + unassigned rows for
+// non-admins, so no extra filter is needed here beyond that safety net.
+async function loadOpenJobs(){
+  const { data, error } = await sb.from('deliveries').select('*').eq('status', 'Requested').is('transporter_id', null).order('created_at', { ascending: false });
+  if(error){ showToast('Could not load open jobs'); return; }
+  state.openJobs = (data || []).map(mapJob);
+}
+
+async function loadMyJobs(){
+  const { data: { user } } = await sb.auth.getUser();
+  if(!user) return;
+  const { data, error } = await sb.from('deliveries').select('*, buyers(name, business_name, phone, region, district), farmers(name, phone, region, district, village)').eq('transporter_id', user.id).order('updated_at', { ascending: false });
+  if(error){ showToast('Could not load your jobs'); return; }
+  state.myJobs = (data || []).map(mapJob);
+}
+
+function mapJob(row){
+  return {
+    id: row.id,
+    crop: row.crop,
+    quantity: row.quantity,
+    unit: row.unit,
+    pickupLocation: row.pickup_location,
+    dropoffLocation: row.dropoff_location,
+    status: row.status,
+    deliveryFee: row.delivery_fee,
+    commissionRate: row.platform_commission_rate,
+    commission: row.platform_commission,
+    payout: row.transporter_payout,
+    buyer: row.buyers ? { name: row.buyers.business_name || row.buyers.name, phone: row.buyers.phone, location: `${row.buyers.district || ''}, ${row.buyers.region || ''}` } : null,
+    farmer: row.farmers ? { name: row.farmers.name, phone: row.farmers.phone, location: `${row.farmers.village || ''}, ${row.farmers.region || ''}` } : null
+  };
+}
+
+/* ===================== NAV / SCREENS ===================== */
+async function goToScreen(id){
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  document.getElementById(id).scrollTop = 0;
+  state.currentScreen = id;
+
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  const navKey = id === 'screen-home' ? 'home' : id === 'screen-my-jobs' ? 'my-jobs' : id === 'screen-profile' ? 'profile' : null;
+  if(navKey) document.querySelectorAll(`.nav-item[data-nav="${navKey}"]`).forEach(n => n.classList.add('active'));
+
+  if(id === 'screen-home'){
+    if(!state.openJobs.length) document.getElementById('openJobsWrap').innerHTML = loadingStateHtml();
+    await loadOpenJobs(); await loadMyJobs(); renderHome();
+  }
+  if(id === 'screen-my-jobs'){
+    if(!state.myJobs.length) document.getElementById('myJobsWrap').innerHTML = loadingStateHtml();
+    await loadMyJobs(); renderMyJobs();
+  }
+  if(id === 'screen-profile') renderProfile();
+}
+
+/* ===================== HOME ===================== */
+function renderHome(){
+  document.getElementById('homeGreeting').textContent = state.transporter.name ? `Hi ${state.transporter.name.split(' ')[0]}` : 'Available jobs';
+  document.getElementById('statOpenJobs').textContent = state.openJobs.length;
+  document.getElementById('statActiveJobs').textContent = state.myJobs.filter(j => j.status !== 'Delivered' && j.status !== 'Cancelled').length;
+
+  const wrap = document.getElementById('openJobsWrap');
+  wrap.innerHTML = state.openJobs.length
+    ? state.openJobs.map(jobCardHtml).join('')
+    : emptyStateHtml('No open jobs right now', 'New delivery jobs will show up here as buyers and farmers request transport.');
+}
+
+function jobCardHtml(j){
+  return `<div class="card job-card" onclick="openJobDetail('${j.id}', 'screen-home')">
+    <div class="job-top">
+      <div class="job-crop">${j.crop}</div>
+      <span class="badge ${j.status.toLowerCase()}">${DELIVERY_STATUS_LABEL[j.status] || j.status}</span>
+    </div>
+    <div class="job-route">${j.pickupLocation || 'Pickup TBC'} <span class="arrow">&rarr;</span> ${j.dropoffLocation || 'Drop-off TBC'}</div>
+    <div class="job-meta-row">
+      <span class="qty">${Number(j.quantity).toLocaleString()} ${j.unit}</span>
+      <span class="fee">${j.deliveryFee != null ? 'TZS ' + Number(j.deliveryFee).toLocaleString() : 'Name your fee'}</span>
+    </div>
+  </div>`;
+}
+
+/* ===================== MY JOBS ===================== */
+function setMyJobsFilter(filter){
+  state.myJobsFilter = filter;
+  document.querySelectorAll('#myJobsFilterRow .filter-pill').forEach(p => p.classList.toggle('active', p.dataset.filter === filter));
+  renderMyJobs();
+}
+
+function renderMyJobs(){
+  const active = ['Assigned', 'PickedUp', 'InTransit'];
+  const items = state.myJobs.filter(j => {
+    if(state.myJobsFilter === 'Active') return active.includes(j.status);
+    return j.status === state.myJobsFilter;
+  });
+  const wrap = document.getElementById('myJobsWrap');
+  wrap.innerHTML = items.length
+    ? items.map(j => `<div class="card job-card" onclick="openJobDetail('${j.id}', 'screen-my-jobs')">
+        <div class="job-top">
+          <div class="job-crop">${j.crop}</div>
+          <span class="badge ${j.status.toLowerCase()}">${DELIVERY_STATUS_LABEL[j.status] || j.status}</span>
+        </div>
+        <div class="job-route">${j.pickupLocation || 'Pickup TBC'} <span class="arrow">&rarr;</span> ${j.dropoffLocation || 'Drop-off TBC'}</div>
+        <div class="job-meta-row">
+          <span class="qty">${Number(j.quantity).toLocaleString()} ${j.unit}</span>
+          <span class="fee">${j.payout != null ? 'Payout TZS ' + Number(j.payout).toLocaleString() : ''}</span>
+        </div>
+      </div>`).join('')
+    : emptyStateHtml('Nothing here yet', 'Jobs you accept will show up in this list.');
+}
+
+/* ===================== JOB DETAIL ===================== */
+function findJob(id){
+  return state.openJobs.find(j => j.id === id) || state.myJobs.find(j => j.id === id) || null;
+}
+
+function partyCardHtml(role, party){
+  if(!party) return '';
+  return `<div class="party-card">
+    <div class="role">${role}</div>
+    <div class="nm">${party.name || 'Not shared yet'}</div>
+    <div class="loc">${party.location || ''}</div>
+    ${party.phone ? `<a class="wa-btn" style="margin-top:10px;" href="${waLink(party.phone, 'Hi, I am your Shambani transporter for this delivery.')}" target="_blank" rel="noopener">Message on WhatsApp</a>` : ''}
+  </div>`;
+}
+
+function openJobDetail(id, from){
+  const j = findJob(id);
+  if(!j) return;
+  state.currentJobId = id;
+  state.detailFrom = from || 'screen-home';
+
+  document.getElementById('jdCrop').textContent = j.crop;
+  document.getElementById('jdRoute').textContent = `${j.pickupLocation || 'Pickup TBC'} → ${j.dropoffLocation || 'Drop-off TBC'}`;
+  document.getElementById('jdQty').textContent = `${Number(j.quantity).toLocaleString()} ${j.unit}`;
+  document.getElementById('jdStatus').textContent = DELIVERY_STATUS_LABEL[j.status] || j.status;
+
+  const unassigned = j.status === 'Requested';
+  document.getElementById('jdUnassignedWrap').style.display = unassigned ? 'block' : 'none';
+  document.getElementById('jdAssignedWrap').style.display = unassigned ? 'none' : 'block';
+  document.getElementById('jdPartiesWrap').innerHTML = unassigned ? '' : (partyCardHtml('Farmer (pickup)', j.farmer) + partyCardHtml('Buyer (drop-off)', j.buyer));
+
+  if(unassigned){
+    document.getElementById('jdFeeInput').value = '';
+    document.getElementById('jdCommissionHint').textContent = 'Shambani keeps a 10% commission from this fee; the rest is your payout.';
+  } else {
+    document.getElementById('jdFee').textContent = j.deliveryFee != null ? `TZS ${Number(j.deliveryFee).toLocaleString()}` : '—';
+    document.getElementById('jdPayout').textContent = j.payout != null ? `TZS ${Number(j.payout).toLocaleString()}` : '—';
+    const btn = document.getElementById('jdActionBtn');
+    if(j.status === 'Delivered' || j.status === 'Cancelled'){
+      btn.style.display = 'none';
+    } else {
+      btn.style.display = 'flex';
+      btn.textContent = ACTION_LABEL[j.status] || 'Update status';
+    }
+  }
+
+  goToScreen('screen-job-detail');
+}
+
+// Claims an open job. Guards against a race with another transporter by
+// only succeeding when the row is still unassigned and Requested — RLS
+// backs this up server-side too (see "deliveries update participant or
+// transporter" policy), so a lost race just returns no rows updated.
+async function acceptJob(){
+  const j = findJob(state.currentJobId);
+  if(!j) return;
+  const feeInput = document.getElementById('jdFeeInput').value;
+  const fee = Number(feeInput);
+  if(!feeInput || !(fee > 0)){ showToast('Enter a delivery fee first'); return; }
+
+  const { data: { user } } = await sb.auth.getUser();
+  if(!user){ showToast('Session expired, please sign in again'); goToScreen('screen-login'); return; }
+
+  const { data, error } = await sb.from('deliveries')
+    .update({ transporter_id: user.id, delivery_fee: fee, status: 'Assigned' })
+    .eq('id', j.id).eq('status', 'Requested').is('transporter_id', null)
+    .select();
+
+  if(error){ showToast('Could not accept job: ' + error.message); return; }
+  if(!data || !data.length){ showToast('Another transporter already took this job'); await loadOpenJobs(); renderHome(); goToScreen('screen-home'); return; }
+
+  showToast('Job accepted!');
+  await loadOpenJobs(); await loadMyJobs();
+  openJobDetail(j.id, 'screen-my-jobs');
+}
+
+async function advanceJobStatus(){
+  const j = findJob(state.currentJobId);
+  if(!j) return;
+  const next = NEXT_STATUS[j.status];
+  if(!next) return;
+
+  const { data: { user } } = await sb.auth.getUser();
+  const { error } = await sb.from('deliveries').update({ status: next }).eq('id', j.id).eq('transporter_id', user.id);
+  if(error){ showToast('Could not update status: ' + error.message); return; }
+
+  showToast(next === 'Delivered' ? 'Delivery marked complete!' : `Status updated to ${DELIVERY_STATUS_LABEL[next]}`);
+  await loadMyJobs();
+  openJobDetail(j.id, 'screen-my-jobs');
+}
+
+/* ===================== PROFILE ===================== */
+function renderProfile(){
+  const t = state.transporter;
+  document.getElementById('profileAvatar').textContent = (t.name || '?').charAt(0).toUpperCase();
+  document.getElementById('profileName').textContent = t.name || '';
+  document.getElementById('profileLoc').textContent = `${t.district || ''}, ${t.region || ''}`;
+  document.getElementById('profileVerifyBadge').style.display = t.verified ? 'inline-flex' : 'none';
+  document.getElementById('profilePhone').textContent = t.phone || '—';
+  document.getElementById('profileVehicle').textContent = t.vehicleType || '—';
+  document.getElementById('profileCapacity').textContent = t.vehicleCapacity ? `${t.vehicleCapacity} ${t.capacityUnit || 'kg'}` : '—';
+  const totalEarned = state.myJobs.filter(j => j.status === 'Delivered').reduce((sum, j) => sum + (Number(j.payout) || 0), 0);
+  document.getElementById('profileEarnings').textContent = `TZS ${totalEarned.toLocaleString()}`;
+  refreshPushNotifStatus();
+}
+
+/* ===================== PUSH NOTIFICATIONS ===================== */
+const VAPID_PUBLIC_KEY = 'BKMG5sLSi0CkIb6tmcHFK0vMaKYCFSpHDk0R91MM4t19cWAGFFYmnqi1JK277enlg4TrqCwRN-MIrpnxLUCGz5g';
+
+function urlBase64ToUint8Array(base64String){
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for(let i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i);
+  return outputArray;
+}
+
+async function refreshPushNotifStatus(){
+  const statusEl = document.getElementById('pushNotifStatus');
+  if(!statusEl) return;
+  if(!('serviceWorker' in navigator) || !('PushManager' in window)){
+    statusEl.textContent = 'Not supported on this browser';
+    return;
+  }
+  try {
+    const reg = await navigator.serviceWorker.getRegistration();
+    const sub = reg ? await reg.pushManager.getSubscription() : null;
+    if(sub){
+      statusEl.textContent = 'Enabled';
+    } else if(Notification.permission === 'denied'){
+      statusEl.textContent = 'Blocked — enable in browser settings';
+    } else {
+      statusEl.textContent = 'Tap to enable';
+    }
+  } catch(e){
+    statusEl.textContent = 'Tap to enable';
+  }
+}
+
+async function enablePushNotifications(){
+  const statusEl = document.getElementById('pushNotifStatus');
+  if(!('serviceWorker' in navigator) || !('PushManager' in window)){
+    showToast('Push notifications are not supported on this browser');
+    return;
+  }
+
+  try {
+    const reg = await navigator.serviceWorker.getRegistration();
+    if(!reg){ showToast('Still setting up — try again in a moment'); return; }
+
+    let sub = await reg.pushManager.getSubscription();
+    if(sub){
+      showToast('Push notifications are already enabled');
+      refreshPushNotifStatus();
+      return;
+    }
+
+    if(statusEl) statusEl.textContent = 'Enabling…';
+
+    const permission = await Notification.requestPermission();
+    if(permission !== 'granted'){
+      if(statusEl) statusEl.textContent = permission === 'denied' ? 'Blocked — enable in browser settings' : 'Tap to enable';
+      showToast('Notification permission was not granted');
+      return;
+    }
+
+    sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+    });
+
+    const { data: { user } } = await sb.auth.getUser();
+    if(!user){ showToast('Please sign in again'); return; }
+
+    const subJson = sub.toJSON();
+    const { error } = await sb.from('push_subscriptions').upsert({
+      user_id: user.id,
+      endpoint: subJson.endpoint,
+      p256dh: subJson.keys.p256dh,
+      auth: subJson.keys.auth,
+      app: 'transporter',
+    }, { onConflict: 'endpoint' });
+
+    if(error){ showToast('Could not save subscription: ' + error.message); return; }
+
+    showToast('Push notifications enabled');
+    refreshPushNotifStatus();
+  } catch(e){
+    showToast('Could not enable push notifications');
+  }
+}
+
+/* ===================== REALTIME ===================== */
+function debounce(fn, wait){
+  let t;
+  return (...args) => {
+    clearTimeout(t);
+    t = setTimeout(() => fn(...args), wait);
+  };
+}
+
+let realtimeReady = false;
+function setupRealtime(){
+  if(realtimeReady) return;
+  realtimeReady = true;
+
+  const refreshAll = debounce(async () => {
+    await loadOpenJobs();
+    await loadMyJobs();
+    refreshAfterRealtime();
+  }, 400);
+
+  sb.channel('rt-deliveries')
+    .on('postgres_changes', { event: '*', schema: 'marketplace', table: 'deliveries' }, refreshAll)
+    .subscribe();
+}
+
+function teardownRealtime(){
+  sb.removeAllChannels();
+  realtimeReady = false;
+}
+
+function refreshAfterRealtime(){
+  const s = state.currentScreen;
+  if(s === 'screen-home') renderHome();
+  else if(s === 'screen-my-jobs') renderMyJobs();
+  else if(s === 'screen-job-detail' && state.currentJobId){
+    if(findJob(state.currentJobId)) openJobDetail(state.currentJobId, state.detailFrom);
+  }
+}
+
+/* ===================== SESSION / BOOT ===================== */
+async function checkSessionOnLoad(){
+  const { data: { session } } = await sb.auth.getSession();
+  if(session){
+    await loadTransporterAndEnter();
+  } else {
+    goToScreen('screen-login');
+  }
+}
+
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('/sw.js', { scope: '/transporter-app.html' }).catch(() => {});
+}
+
+checkSessionOnLoad();
+</script>
+</body>
+</html>

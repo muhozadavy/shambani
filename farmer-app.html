@@ -288,6 +288,12 @@
   .delivery-chip{ padding:8px 13px; border-radius:100px; border:1.5px solid var(--line); background:var(--white); font-size:12.5px; font-weight:600; cursor:pointer; }
   .delivery-chip.selected{ background:var(--ink); border-color:var(--ink); color:var(--white); }
 
+  .delivery-status-card{ background:var(--white); border:1px solid var(--line); border-radius:var(--radius-sm); padding:14px; margin-top:12px; }
+  .delivery-status-title{ display:flex; align-items:center; gap:6px; font-family:'Poppins',sans-serif; font-weight:700; font-size:13.5px; margin-bottom:8px; }
+  .delivery-status-card.cancelled .delivery-status-title{ color:var(--slate); }
+  .delivery-transporter{ font-size:13px; font-weight:600; margin-top:10px; }
+  .delivery-fee{ font-size:12.5px; color:var(--slate); margin-top:4px; }
+
   .icon{ width:20px; height:20px; display:inline-block; flex-shrink:0; }
 
   /* ---------- Login ---------- */
@@ -1263,16 +1269,17 @@ async function loadBuyingRequests(){
     (progressRows || []).forEach(p => { progressMap[p.buying_request_id] = p.matched_qty || 0; });
   }
 
-  const { data: myOfferRows } = await sb.from('offers').select('*').eq('farmer_id', user.id);
+  const { data: myOfferRows } = await sb.from('offers').select('*, deliveries(*, transporters(name, phone, vehicle_type))').eq('farmer_id', user.id);
   const myOfferMap = {};
   (myOfferRows || []).forEach(o => {
     if(o.status === 'Pending' || o.status === 'Accepted'){
-      myOfferMap[o.buying_request_id] = { id: o.id, qty: o.quantity, unit: o.unit, price: o.price, date: o.ready_date, status: o.status, deliveryMethod: o.delivery_method };
+      myOfferMap[o.buying_request_id] = { id: o.id, qty: o.quantity, unit: o.unit, price: o.price, date: o.ready_date, status: o.status, deliveryMethod: o.delivery_method, delivery: mapDelivery((o.deliveries || [])[0]) };
     }
   });
 
   state.buyingRequests = (requestRows || []).map(row => ({
     id: row.id,
+    buyerId: row.buyer_id,
     crop: row.crop,
     quality: row.quality,
     quantity: row.quantity,
@@ -1360,10 +1367,51 @@ function waLink(phone, text){
 }
 
 function deliveryChipsHtml(current, fnName, idValue){
-  const options = ['Pickup', 'Farmer delivers', 'To arrange'];
+  const options = ['Pickup', 'Farmer delivers', 'To arrange', 'Request transporter'];
   return `<div class="delivery-chips">${options.map(opt =>
     `<div class="delivery-chip ${current === opt ? 'selected' : ''}" onclick="${fnName}('${idValue}','${opt}')">${opt}</div>`
   ).join('')}</div>`;
+}
+
+const DELIVERY_STATUS_LABEL = {
+  Requested: 'Finding a transporter…',
+  Assigned: 'Transporter assigned',
+  PickedUp: 'Picked up',
+  InTransit: 'On the way',
+  Delivered: 'Delivered',
+  Cancelled: 'Delivery cancelled'
+};
+const DELIVERY_STATUS_STEPS = ['Requested', 'Assigned', 'PickedUp', 'InTransit', 'Delivered'];
+
+function deliveryStatusHtml(d){
+  if(!d) return '';
+  const cancelled = d.status === 'Cancelled';
+  const stepIdx = DELIVERY_STATUS_STEPS.indexOf(d.status);
+  const pct = cancelled ? 0 : Math.round(((stepIdx + 1) / DELIVERY_STATUS_STEPS.length) * 100);
+  return `<div class="delivery-status-card ${cancelled ? 'cancelled' : ''}">
+    <div class="delivery-status-title">🚚 ${DELIVERY_STATUS_LABEL[d.status] || d.status}</div>
+    ${!cancelled ? `<div class="progress-track"><div class="progress-fill" style="width:${pct}%;"></div></div>` : ''}
+    ${d.transporterName ? `<div class="delivery-transporter">${d.transporterName}${d.vehicleType ? ' · ' + d.vehicleType : ''}${d.transporterPhone ? ' · ' + d.transporterPhone : ''}</div>` : ''}
+    ${d.deliveryFee != null ? `<div class="delivery-fee">Delivery fee: TZS ${Number(d.deliveryFee).toLocaleString()}</div>` : ''}
+  </div>`;
+}
+
+// Creates the delivery job the first time "Request transporter" is chosen.
+// Safe to call again on an existing deal: the unique index on offer_id /
+// purchase_request_id means a second insert is simply ignored.
+async function createDeliveryJob({ offerId, purchaseRequestId, buyerId, farmerId, crop, quantity, unit, pickupLocation, dropoffLocation }){
+  const row = {
+    offer_id: offerId || null,
+    purchase_request_id: purchaseRequestId || null,
+    buyer_id: buyerId,
+    farmer_id: farmerId,
+    crop, quantity, unit,
+    pickup_location: pickupLocation || null,
+    dropoff_location: dropoffLocation || null
+  };
+  const conflictTarget = offerId ? 'offer_id' : 'purchase_request_id';
+  const { error } = await sb.from('deliveries').upsert(row, { onConflict: conflictTarget, ignoreDuplicates: true });
+  if(error) showToast('Could not request a transporter: ' + error.message);
 }
 
 /* ===================== AUTH ===================== */
@@ -1657,6 +1705,18 @@ function setupRealtime(){
   sb.channel('rt-buying-requests')
     .on('postgres_changes', { event: '*', schema: 'marketplace', table: 'buying_requests' }, refreshBuyingRequests)
     .subscribe();
+
+  // A transporter accepting/progressing a job updates marketplace.deliveries
+  // directly, so both listings (purchase_requests) and buying requests
+  // (offers) need a refresh to pick up the new status.
+  const refreshDeliveries = debounce(async () => {
+    await loadListings();
+    await loadBuyingRequests();
+    refreshAfterRealtime();
+  }, 400);
+  sb.channel('rt-deliveries')
+    .on('postgres_changes', { event: '*', schema: 'marketplace', table: 'deliveries' }, refreshDeliveries)
+    .subscribe();
 }
 
 function teardownRealtime(){
@@ -1687,11 +1747,13 @@ async function loadListings(){
 
 async function loadIncomingPurchaseRequests(listingIds){
   if(!listingIds.length){ state.incomingPurchaseRequests = []; return; }
-  const { data, error } = await sb.from('purchase_requests').select('*').in('listing_id', listingIds).order('created_at', { ascending: false });
+  const { data, error } = await sb.from('purchase_requests').select('*, listings(crop), deliveries(*, transporters(name, phone, vehicle_type))').in('listing_id', listingIds).order('created_at', { ascending: false });
   if(error){ showToast('Could not load buyer interest'); return; }
   state.incomingPurchaseRequests = (data || []).map(row => ({
     id: row.id,
     listingId: row.listing_id,
+    buyerId: row.buyer_id,
+    crop: row.listings ? row.listings.crop : '',
     buyerBusiness: row.buyer_business,
     buyerType: row.buyer_type,
     buyerPhone: row.buyer_phone,
@@ -1702,8 +1764,26 @@ async function loadIncomingPurchaseRequests(listingIds){
     priceUnit: row.price_unit,
     sentAt: row.created_at ? row.created_at.slice(0, 10) : '',
     status: row.status,
-    deliveryMethod: row.delivery_method
+    deliveryMethod: row.delivery_method,
+    delivery: mapDelivery((row.deliveries || [])[0])
   }));
+}
+
+// Normalizes a raw `deliveries` row (or undefined) into the shape the
+// delivery status card expects.
+function mapDelivery(d){
+  if(!d) return null;
+  return {
+    id: d.id,
+    status: d.status,
+    transporterId: d.transporter_id,
+    transporterName: d.transporters ? d.transporters.name : null,
+    transporterPhone: d.transporters ? d.transporters.phone : null,
+    vehicleType: d.transporters ? d.transporters.vehicle_type : null,
+    deliveryFee: d.delivery_fee,
+    transporterPayout: d.transporter_payout,
+    platformCommission: d.platform_commission
+  };
 }
 
 async function checkSessionOnLoad(){
@@ -1982,7 +2062,7 @@ function interestCardHtml(pr){
       <div class="connect-phone">${pr.buyerPhone || 'No phone on file'}</div>
       ${pr.buyerPhone ? `<a class="wa-btn" href="${waLink(pr.buyerPhone, `Hi, following up on the ${pr.qty}${pr.unit} deal on Shambani`)}" target="_blank" rel="noopener">Message on WhatsApp</a>` : ''}
       <div class="delivery-label">Delivery</div>
-      ${deliveryChipsHtml(pr.deliveryMethod, 'setPurchaseRequestDelivery', pr.id)}
+      ${pr.delivery ? deliveryStatusHtml(pr.delivery) : deliveryChipsHtml(pr.deliveryMethod, 'setPurchaseRequestDelivery', pr.id)}
       <button class="btn btn-ghost btn-sm" style="width:100%; margin-top:12px; background:var(--white);" onclick="if(confirm('Cancel this deal? The listing will become available again.')) declinePurchaseRequest('${pr.id}')">Cancel deal</button>
     </div>` : ''}
   </div>`;
@@ -2063,6 +2143,20 @@ async function setPurchaseRequestDelivery(id, method){
   const { error } = await sb.from('purchase_requests').update({ delivery_method: method }).eq('id', id);
   if(error){ showToast('Could not update delivery method'); return; }
   pr.deliveryMethod = method;
+  if(method === 'Request transporter' && !pr.delivery){
+    const { data: { user } } = await sb.auth.getUser();
+    await createDeliveryJob({
+      purchaseRequestId: id,
+      buyerId: pr.buyerId,
+      farmerId: user.id,
+      crop: pr.crop,
+      quantity: pr.qty,
+      unit: pr.unit,
+      pickupLocation: `${state.farmer.district || ''}, ${state.farmer.region || ''}`,
+      dropoffLocation: pr.location
+    });
+    await loadIncomingPurchaseRequests(state.listings.map(l => l.id));
+  }
   renderListingInterest(pr.listingId);
 }
 
@@ -2283,6 +2377,20 @@ async function setOfferDelivery(buyingRequestId, method){
   const { error } = await sb.from('offers').update({ delivery_method: method }).eq('id', r.myOffer.id);
   if(error){ showToast('Could not update delivery method'); return; }
   r.myOffer.deliveryMethod = method;
+  if(method === 'Request transporter' && !r.myOffer.delivery){
+    const { data: { user } } = await sb.auth.getUser();
+    await createDeliveryJob({
+      offerId: r.myOffer.id,
+      buyerId: r.buyerId,
+      farmerId: user.id,
+      crop: r.crop,
+      quantity: r.myOffer.qty,
+      unit: r.myOffer.unit,
+      pickupLocation: `${state.farmer.village || ''}, ${state.farmer.region || ''}`,
+      dropoffLocation: r.location
+    });
+    await loadBuyingRequests();
+  }
   openRequestDetail(r.id);
 }
 
@@ -2322,7 +2430,7 @@ function renderOfferSummaryBlock(r){
       <div class="connect-phone">${r.buyerPhone || 'No phone on file'}</div>
       ${r.buyerPhone ? `<a class="wa-btn" href="${waLink(r.buyerPhone, `Hi, following up on the ${r.crop} deal on Shambani`)}" target="_blank" rel="noopener">Message on WhatsApp</a>` : ''}
       <div class="delivery-label">Delivery</div>
-      ${deliveryChipsHtml(r.myOffer.deliveryMethod, 'setOfferDelivery', r.id)}
+      ${r.myOffer.delivery ? deliveryStatusHtml(r.myOffer.delivery) : deliveryChipsHtml(r.myOffer.deliveryMethod, 'setOfferDelivery', r.id)}
     </div>` : '';
   return `<div class="offer-summary">
       <div class="lbl">Your offer ${r.myOffer.status === 'Accepted' ? 'was accepted' : 'submitted'}</div>
