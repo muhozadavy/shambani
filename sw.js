@@ -126,6 +126,34 @@ self.addEventListener('push', (event) => {
   event.waitUntil(self.registration.showNotification(title, options));
 });
 
+/* ===================== BACKGROUND SYNC ===================== */
+// Woken by the browser (best-effort, mainly Chrome/Android) when connectivity
+// returns after a page queued an offline action. No IndexedDB access to the
+// queue itself here — it's kept simple by asking any open app tab to flush
+// its own locally-queued actions, since that's where the Supabase session lives.
+self.addEventListener('sync', (event) => {
+  if (event.tag === 'flush-queue') {
+    event.waitUntil(
+      clients.matchAll({ type: 'window' }).then((clientList) => {
+        clientList.forEach((c) => c.postMessage({ type: 'FLUSH_OFFLINE_QUEUE' }));
+      })
+    );
+  }
+});
+
+// Periodic Background Sync (Chrome/Android installed PWAs only, subject to
+// engagement heuristics — not available on iOS Safari or most other
+// browsers). Nudges any open tab to refresh its data in the background.
+self.addEventListener('periodicsync', (event) => {
+  if (event.tag === 'refresh-data') {
+    event.waitUntil(
+      clients.matchAll({ type: 'window' }).then((clientList) => {
+        clientList.forEach((c) => c.postMessage({ type: 'PERIODIC_REFRESH' }));
+      })
+    );
+  }
+});
+
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const targetUrl = (event.notification.data && event.notification.data.url) || self.registration.scope;

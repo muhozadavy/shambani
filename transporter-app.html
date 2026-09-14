@@ -364,9 +364,37 @@
     opacity:0; transform:translateY(10px); pointer-events:none; transition:all .25s ease; z-index:20;
   }
   .toast.show{ opacity:1; transform:translateY(0); }
+
+  /* ---------- Offline queue banner ---------- */
+  .offline-banner{
+    position:fixed; top:0; left:0; right:0; z-index:40; background:var(--ink); color:var(--white);
+    font-size:12.5px; font-weight:600; text-align:center; padding:9px 16px;
+    transform:translateY(-100%); transition:transform .25s ease;
+  }
+  .offline-banner.show{ transform:translateY(0); }
+
+  /* ---------- Swipe-back edge hint ---------- */
+  .swipe-back-hint{
+    position:fixed; left:6px; top:50%; transform:translateY(-50%); width:34px; height:34px;
+    border-radius:50%; background:rgba(26,26,26,.85); color:var(--white); display:flex; align-items:center;
+    justify-content:center; font-size:18px; opacity:0; transition:opacity .15s ease; pointer-events:none; z-index:60;
+  }
+  .swipe-back-hint.show{ opacity:1; }
+
+  /* ---------- Live location sharing ---------- */
+  .location-share-card{ background:var(--white); border:1px solid var(--line); border-radius:var(--radius-sm); padding:14px; margin-bottom:16px; display:flex; align-items:center; justify-content:space-between; gap:12px; }
+  .location-share-card .ls-text{ font-size:12.5px; color:var(--slate); }
+  .location-share-card .ls-title{ font-size:13.5px; font-weight:700; margin-bottom:2px; }
+  .ls-toggle{ position:relative; width:44px; height:26px; flex-shrink:0; }
+  .ls-toggle input{ opacity:0; width:0; height:0; }
+  .ls-toggle .ls-slider{ position:absolute; inset:0; background:var(--line); border-radius:100px; cursor:pointer; transition:background .2s; }
+  .ls-toggle .ls-slider::before{ content:''; position:absolute; width:20px; height:20px; left:3px; top:3px; background:var(--white); border-radius:50%; transition:transform .2s; }
+  .ls-toggle input:checked + .ls-slider{ background:var(--yellow-dark, var(--yellow)); }
+  .ls-toggle input:checked + .ls-slider::before{ transform:translateX(18px); }
 </style>
 </head>
 <body>
+  <div class="offline-banner" id="offlineBanner">📡 Offline — <span id="offlineCount">0</span> update(s) will sync automatically</div>
 <div class="app-frame">
 
   <!-- ===================== SPLASH ===================== -->
@@ -556,7 +584,7 @@
   <!-- ===================== JOB DETAIL ===================== -->
   <div class="screen" id="screen-job-detail">
     <div class="sub-header">
-      <div class="back-circle" onclick="goToScreen(state.detailFrom || 'screen-home')">
+      <div class="back-circle" onclick="goBack()">
         <svg class="icon" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="#1A1A1A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </div>
       <h2>Job details</h2>
@@ -586,6 +614,16 @@
           <div class="detail-stat"><div class="lbl">Your payout</div><div class="val" id="jdPayout"></div></div>
         </div>
         <div id="jdStatusStepper" style="margin-bottom:18px;"></div>
+        <div class="location-share-card" id="jdLocationShareCard" style="display:none;">
+          <div>
+            <div class="ls-title">Share live location</div>
+            <div class="ls-text" id="jdLocationShareText">Buyer &amp; farmer see your position while you're on the road</div>
+          </div>
+          <label class="ls-toggle">
+            <input type="checkbox" id="jdLocationShareToggle" onchange="toggleLocationSharing(this.checked)" />
+            <span class="ls-slider"></span>
+          </label>
+        </div>
         <button class="btn btn-primary" id="jdActionBtn" onclick="advanceJobStatus()"></button>
       </div>
     </div>
@@ -654,7 +692,11 @@ const state = {
   myJobs: [],
   myJobsFilter: 'Active',
   currentJobId: null,
-  detailFrom: 'screen-home'
+  detailFrom: 'screen-home',
+  navStack: [],
+  locationWatchId: null,
+  locationSharingJobId: null,
+  wakeLock: null
 };
 
 const DELIVERY_STATUS_LABEL = {
@@ -801,6 +843,7 @@ async function handleAuthSubmit(){
 }
 
 async function handleLogout(){
+  stopLocationSharing();
   await sb.auth.signOut();
   teardownRealtime();
   state.transporter = { name:'', phone:'', vehicleType:'Motorcycle', vehicleCapacity:'', capacityUnit:'kg', region:'Arusha', district:'', verified:false };
@@ -879,6 +922,11 @@ async function loadTransporterAndEnter(){
   state.transporter = transporterRowToState(row);
   setupRealtime();
   goToScreen('screen-home');
+  flushOfflineQueue();
+  // Resume live location sharing if reopening the app mid-delivery.
+  await loadMyJobs();
+  const active = state.myJobs.find(j => j.status === 'PickedUp' || j.status === 'InTransit');
+  if(active) startLocationSharing(active.id);
 }
 
 // Every open job on the board — any delivery still looking for a
@@ -916,8 +964,16 @@ function mapJob(row){
   };
 }
 
-/* ===================== NAV / SCREENS ===================== */
-async function goToScreen(id){
+/* ===================== NAV / SCREENS / BACK GESTURE ===================== */
+const NAV_ROOT_SCREENS = ['screen-splash', 'screen-login', 'screen-forgot-password', 'screen-ob1'];
+async function goToScreen(id, opts){
+  opts = opts || {};
+  if(!opts.isBack && state.currentScreen && state.currentScreen !== id && !NAV_ROOT_SCREENS.includes(state.currentScreen)){
+    state.navStack.push(state.currentScreen);
+  }
+  if(!opts.skipHistory && !NAV_ROOT_SCREENS.includes(id)){
+    try { history.pushState({ screen: id }, '', '#' + id); } catch(e){}
+  }
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById(id).classList.add('active');
   document.getElementById(id).scrollTop = 0;
@@ -1038,6 +1094,12 @@ function openJobDetail(id, from){
       btn.style.display = 'flex';
       btn.textContent = ACTION_LABEL[j.status] || 'Update status';
     }
+
+    const shareCard = document.getElementById('jdLocationShareCard');
+    const shareToggle = document.getElementById('jdLocationShareToggle');
+    const onTheRoad = j.status === 'PickedUp' || j.status === 'InTransit';
+    shareCard.style.display = onTheRoad ? 'flex' : 'none';
+    if(onTheRoad) shareToggle.checked = state.locationSharingJobId === j.id;
   }
 
   goToScreen('screen-job-detail');
@@ -1057,12 +1119,22 @@ async function acceptJob(){
   const { data: { user } } = await sb.auth.getUser();
   if(!user){ showToast('Session expired, please sign in again'); goToScreen('screen-login'); return; }
 
+  if(!navigator.onLine){
+    queueOfflineAction({ type: 'acceptJob', jobId: j.id, userId: user.id, fee });
+    showToast('Offline — job will be claimed once you\'re back online');
+    return;
+  }
+
   const { data, error } = await sb.from('deliveries')
     .update({ transporter_id: user.id, delivery_fee: fee, status: 'Assigned' })
     .eq('id', j.id).eq('status', 'Requested').is('transporter_id', null)
     .select();
 
-  if(error){ showToast('Could not accept job: ' + error.message); return; }
+  if(error){
+    queueOfflineAction({ type: 'acceptJob', jobId: j.id, userId: user.id, fee });
+    showToast('Connection issue — will retry automatically');
+    return;
+  }
   if(!data || !data.length){ showToast('Another transporter already took this job'); await loadOpenJobs(); renderHome(); goToScreen('screen-home'); return; }
 
   showToast('Job accepted!');
@@ -1077,10 +1149,25 @@ async function advanceJobStatus(){
   if(!next) return;
 
   const { data: { user } } = await sb.auth.getUser();
-  const { error } = await sb.from('deliveries').update({ status: next }).eq('id', j.id).eq('transporter_id', user.id);
-  if(error){ showToast('Could not update status: ' + error.message); return; }
 
-  showToast(next === 'Delivered' ? 'Delivery marked complete!' : `Status updated to ${DELIVERY_STATUS_LABEL[next]}`);
+  if(!navigator.onLine){
+    queueOfflineAction({ type: 'advanceStatus', jobId: j.id, userId: user.id, status: next });
+    j.status = next; // optimistic local update so the UI reflects the change immediately
+    showToast('Offline — will sync when you\'re back online');
+  } else {
+    const { error } = await sb.from('deliveries').update({ status: next }).eq('id', j.id).eq('transporter_id', user.id);
+    if(error){
+      queueOfflineAction({ type: 'advanceStatus', jobId: j.id, userId: user.id, status: next });
+      j.status = next;
+      showToast('Connection issue — will retry automatically');
+    } else {
+      showToast(next === 'Delivered' ? 'Delivery marked complete!' : `Status updated to ${DELIVERY_STATUS_LABEL[next]}`);
+    }
+  }
+
+  if(next === 'PickedUp' || next === 'InTransit') startLocationSharing(j.id);
+  if(next === 'Delivered' || next === 'Cancelled') stopLocationSharing();
+
   await loadMyJobs();
   openJobDetail(j.id, 'screen-my-jobs');
 }
@@ -1226,6 +1313,164 @@ function refreshAfterRealtime(){
   }
 }
 
+/* ===================== SWIPE-BACK GESTURE ===================== */
+function goBack(){
+  if(state.navStack.length){
+    const prev = state.navStack.pop();
+    goToScreen(prev, { isBack: true });
+  } else if(state.currentScreen !== 'screen-home' && !NAV_ROOT_SCREENS.includes(state.currentScreen)){
+    goToScreen('screen-home', { isBack: true });
+  }
+}
+window.addEventListener('popstate', () => goBack());
+
+(function setupSwipeBack(){
+  let startX = null, startY = null, startT = null;
+  function hint(){
+    let el = document.getElementById('swipeBackHint');
+    if(!el){
+      el = document.createElement('div');
+      el.id = 'swipeBackHint';
+      el.className = 'swipe-back-hint';
+      el.textContent = '‹';
+      document.body.appendChild(el);
+    }
+    return el;
+  }
+  document.addEventListener('touchstart', (e) => {
+    const t = e.touches[0];
+    if(t.clientX > 28){ startX = null; return; }
+    startX = t.clientX; startY = t.clientY; startT = Date.now();
+  }, { passive: true });
+  document.addEventListener('touchmove', (e) => {
+    if(startX === null) return;
+    const t = e.touches[0];
+    const dx = t.clientX - startX, dy = Math.abs(t.clientY - startY);
+    if(dx > 30 && dy < 60) hint().classList.add('show');
+  }, { passive: true });
+  document.addEventListener('touchend', (e) => {
+    const h = document.getElementById('swipeBackHint');
+    if(h) h.classList.remove('show');
+    if(startX === null) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - startX, dy = Math.abs(t.clientY - startY), dt = Date.now() - startT;
+    startX = null;
+    if(dx > 70 && dy < 60 && dt < 600) goBack();
+  }, { passive: true });
+})();
+
+/* ===================== OFFLINE ACTION QUEUE ===================== */
+// Poor-signal delivery routes are the norm for this app, so status updates
+// made while offline are queued locally and replayed automatically once
+// connectivity returns (on 'online', on tab focus, or woken by a Background
+// Sync event from the service worker).
+const OFFLINE_QUEUE_KEY = 'shambani_transporter_offline_queue';
+function loadOfflineQueue(){ try { return JSON.parse(localStorage.getItem(OFFLINE_QUEUE_KEY) || '[]'); } catch(e){ return []; } }
+function saveOfflineQueue(q){ try { localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(q)); } catch(e){} }
+function updateOfflineBadge(){
+  const q = loadOfflineQueue();
+  const banner = document.getElementById('offlineBanner');
+  const count = document.getElementById('offlineCount');
+  if(!banner) return;
+  count.textContent = q.length;
+  banner.classList.toggle('show', !navigator.onLine || q.length > 0);
+}
+async function requestBackgroundSync(){
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    if('sync' in reg) await reg.sync.register('flush-queue');
+  } catch(e){ /* Background Sync unsupported (e.g. iOS Safari) — 'online' listener below covers it */ }
+}
+function queueOfflineAction(action){
+  const q = loadOfflineQueue();
+  q.push(Object.assign({ id: Date.now() + '-' + Math.random().toString(36).slice(2) }, action));
+  saveOfflineQueue(q);
+  updateOfflineBadge();
+  requestBackgroundSync();
+}
+async function runQueuedAction(action){
+  if(action.type === 'advanceStatus'){
+    const { error } = await sb.from('deliveries').update({ status: action.status }).eq('id', action.jobId).eq('transporter_id', action.userId);
+    if(error) throw error;
+  } else if(action.type === 'acceptJob'){
+    await sb.from('deliveries').update({ transporter_id: action.userId, delivery_fee: action.fee, status: 'Assigned' })
+      .eq('id', action.jobId).eq('status', 'Requested').is('transporter_id', null);
+  }
+}
+let flushingQueue = false;
+async function flushOfflineQueue(){
+  if(flushingQueue || !navigator.onLine) return;
+  const q = loadOfflineQueue();
+  if(!q.length) return;
+  flushingQueue = true;
+  const remaining = [];
+  for(const action of q){
+    try { await runQueuedAction(action); }
+    catch(e){ remaining.push(action); }
+  }
+  saveOfflineQueue(remaining);
+  updateOfflineBadge();
+  flushingQueue = false;
+  if(remaining.length < q.length){ await loadMyJobs(); refreshAfterRealtime(); showToast('Synced pending updates'); }
+}
+window.addEventListener('online', flushOfflineQueue);
+window.addEventListener('offline', updateOfflineBadge);
+document.addEventListener('visibilitychange', () => { if(!document.hidden) flushOfflineQueue(); });
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.addEventListener('message', (e) => {
+    if(e.data && e.data.type === 'FLUSH_OFFLINE_QUEUE') flushOfflineQueue();
+    if(e.data && e.data.type === 'PERIODIC_REFRESH'){ loadOpenJobs(); loadMyJobs().then(refreshAfterRealtime); }
+  });
+}
+
+/* ===================== LIVE LOCATION SHARING ===================== */
+// Broadcasts the transporter's position to the assigned delivery row while
+// a job is PickedUp/InTransit, so the buyer and farmer can see where the
+// truck is. This only runs while Shambani is open in the foreground — a
+// browser tab (even installed as a PWA) cannot reliably keep sending GPS
+// updates once the phone screen locks or the app is fully backgrounded;
+// the Screen Wake Lock below keeps the screen (and updates) alive for as
+// long as the driver has the app open on the road.
+let lastLocationWriteAt = 0;
+async function shareLocationOnce(jobId, pos){
+  const now = Date.now();
+  if(now - lastLocationWriteAt < 12000) return; // throttle writes to ~every 12s
+  lastLocationWriteAt = now;
+  await sb.from('deliveries').update({
+    current_latitude: pos.coords.latitude,
+    current_longitude: pos.coords.longitude,
+    location_updated_at: new Date().toISOString()
+  }).eq('id', jobId);
+}
+async function acquireWakeLock(){
+  try { if('wakeLock' in navigator) state.wakeLock = await navigator.wakeLock.request('screen'); } catch(e){ /* denied or unsupported — fine, sharing still works while screen is on */ }
+}
+document.addEventListener('visibilitychange', async () => {
+  if(!document.hidden && state.locationSharingJobId && !state.wakeLock) await acquireWakeLock();
+});
+async function startLocationSharing(jobId){
+  if(!('geolocation' in navigator)){ showToast('Location isn\'t available on this device'); return; }
+  if(state.locationWatchId !== null) stopLocationSharing();
+  state.locationSharingJobId = jobId;
+  state.locationWatchId = navigator.geolocation.watchPosition(
+    (pos) => shareLocationOnce(jobId, pos),
+    () => { /* a single failed fix isn't worth interrupting the driver — just skip it */ },
+    { enableHighAccuracy: true, maximumAge: 10000, timeout: 20000 }
+  );
+  await acquireWakeLock();
+}
+function stopLocationSharing(){
+  if(state.locationWatchId !== null){ navigator.geolocation.clearWatch(state.locationWatchId); state.locationWatchId = null; }
+  if(state.wakeLock){ state.wakeLock.release().catch(() => {}); state.wakeLock = null; }
+  state.locationSharingJobId = null;
+}
+function toggleLocationSharing(on){
+  const jobId = state.currentJobId;
+  if(!jobId) return;
+  if(on) startLocationSharing(jobId);
+  else stopLocationSharing();
+}
+
 /* ===================== SESSION / BOOT ===================== */
 async function checkSessionOnLoad(){
   const { data: { session } } = await sb.auth.getSession();
@@ -1237,9 +1482,20 @@ async function checkSessionOnLoad(){
 }
 
 if('serviceWorker' in navigator){
-  navigator.serviceWorker.register('/sw.js', { scope: '/transporter-app.html' }).catch(() => {});
+  navigator.serviceWorker.register('/sw.js', { scope: '/transporter-app.html' }).then(async (reg) => {
+    // Best-effort: lets Chrome/Android wake the service worker every so
+    // often to nudge a refresh even if no tab is open. Not supported on
+    // iOS Safari or most non-Chrome browsers — silently skipped there.
+    try {
+      if('periodicSync' in reg){
+        const status = await navigator.permissions.query({ name: 'periodic-background-sync' });
+        if(status.state === 'granted') await reg.periodicSync.register('refresh-data', { minInterval: 15 * 60 * 1000 });
+      }
+    } catch(e){}
+  }).catch(() => {});
 }
 
+updateOfflineBadge();
 checkSessionOnLoad();
 </script>
 </body>

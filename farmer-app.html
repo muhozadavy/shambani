@@ -448,9 +448,26 @@
     opacity:0; transform:translateY(10px); pointer-events:none; transition:all .25s ease; z-index:20;
   }
   .toast.show{ opacity:1; transform:translateY(0); }
+
+  /* ---------- Offline queue banner ---------- */
+  .offline-banner{
+    position:fixed; top:0; left:0; right:0; z-index:40; background:var(--ink); color:var(--white);
+    font-size:12.5px; font-weight:600; text-align:center; padding:9px 16px;
+    transform:translateY(-100%); transition:transform .25s ease;
+  }
+  .offline-banner.show{ transform:translateY(0); }
+
+  /* ---------- Swipe-back edge hint ---------- */
+  .swipe-back-hint{
+    position:fixed; left:6px; top:50%; transform:translateY(-50%); width:34px; height:34px;
+    border-radius:50%; background:rgba(26,26,26,.85); color:#fff; display:flex; align-items:center;
+    justify-content:center; font-size:18px; opacity:0; transition:opacity .15s ease; pointer-events:none; z-index:60;
+  }
+  .swipe-back-hint.show{ opacity:1; }
 </style>
 </head>
 <body>
+  <div class="offline-banner" id="offlineBanner">📡 Offline — <span id="offlineCount">0</span> update(s) will sync automatically</div>
 
 <div class="app-frame" id="appFrame">
 
@@ -754,7 +771,7 @@
   <!-- ================= ADD LISTING ================= -->
   <div class="screen" id="screen-add">
     <div class="sub-header">
-      <div class="back-circle" onclick="goToScreen('screen-home')">
+      <div class="back-circle" onclick="goBack()">
         <svg class="icon" style="width:16px;height:16px" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="#1A1A1A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </div>
       <h2>New crop listing</h2>
@@ -825,7 +842,7 @@
   <!-- ================= LISTINGS ================= -->
   <div class="screen" id="screen-listings">
     <div class="sub-header">
-      <div class="back-circle" onclick="goToScreen('screen-home')">
+      <div class="back-circle" onclick="goBack()">
         <svg class="icon" style="width:16px;height:16px" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="#1A1A1A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </div>
       <h2>My listings</h2>
@@ -845,7 +862,7 @@
   <!-- ================= LISTING DETAIL ================= -->
   <div class="screen" id="screen-detail">
     <div class="detail-hero">
-      <div class="back-circle" style="position:absolute; top:16px; left:16px; background:rgba(255,255,255,.9);" onclick="goToScreen('screen-listings')">
+      <div class="back-circle" style="position:absolute; top:16px; left:16px; background:rgba(255,255,255,.9);" onclick="goBack()">
         <svg class="icon" style="width:16px;height:16px" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="#1A1A1A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </div>
       <span class="badge available" id="detailBadge">Available</span>
@@ -905,7 +922,7 @@
   <!-- ================= REQUEST DETAIL / RESPOND ================= -->
   <div class="screen" id="screen-request-detail">
     <div class="sub-header">
-      <div class="back-circle" onclick="goToScreen('screen-requests')">
+      <div class="back-circle" onclick="goBack()">
         <svg class="icon" style="width:16px;height:16px" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="#1A1A1A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </div>
       <h2 id="reqDetailTitle">Potatoes needed</h2>
@@ -1017,7 +1034,7 @@
   <!-- ================= EDIT PROFILE ================= -->
   <div class="screen" id="screen-edit-profile">
     <div class="sub-header">
-      <div class="back-circle" onclick="goToScreen('screen-profile')">
+      <div class="back-circle" onclick="goBack()">
         <svg class="icon" style="width:16px;height:16px" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="#1A1A1A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </div>
       <h2>Edit farm data</h2>
@@ -1124,7 +1141,8 @@ const state = {
   requestsView: 'list',
   currentRequestId: null,
   buyingRequests: [],
-  incomingPurchaseRequests: []
+  incomingPurchaseRequests: [],
+  navStack: []
 };
 
 /* ===================== GEO ===================== */
@@ -1273,7 +1291,7 @@ async function loadBuyingRequests(){
   const myOfferMap = {};
   (myOfferRows || []).forEach(o => {
     if(o.status === 'Pending' || o.status === 'Accepted'){
-      myOfferMap[o.buying_request_id] = { id: o.id, qty: o.quantity, unit: o.unit, price: o.price, date: o.ready_date, status: o.status, deliveryMethod: o.delivery_method, delivery: mapDelivery((o.deliveries || [])[0]) };
+      myOfferMap[o.buying_request_id] = { id: o.id, qty: o.quantity, unit: o.unit, price: o.price, date: o.ready_date, status: o.status, deliveryMethod: o.delivery_method, delivery: mapDelivery(o.deliveries) };
     }
   });
 
@@ -1298,8 +1316,16 @@ async function loadBuyingRequests(){
   }));
 }
 
-/* ===================== NAV / SCREENS ===================== */
-async function goToScreen(id){
+/* ===================== NAV / SCREENS / BACK GESTURE ===================== */
+const NAV_ROOT_SCREENS = ['screen-splash', 'screen-login', 'screen-forgot-password', 'screen-ob1', 'screen-ob2', 'screen-ob3', 'screen-ob4'];
+async function goToScreen(id, opts){
+  opts = opts || {};
+  if(!opts.isBack && state.currentScreen && state.currentScreen !== id && !NAV_ROOT_SCREENS.includes(state.currentScreen)){
+    state.navStack.push(state.currentScreen);
+  }
+  if(!opts.skipHistory && !NAV_ROOT_SCREENS.includes(id)){
+    try { history.pushState({ screen: id }, '', '#' + id); } catch(e){}
+  }
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById(id).classList.add('active');
   document.getElementById(id).scrollTop = 0;
@@ -1393,13 +1419,27 @@ function deliveryStatusHtml(d){
     ${!cancelled ? `<div class="progress-track"><div class="progress-fill" style="width:${pct}%;"></div></div>` : ''}
     ${d.transporterName ? `<div class="delivery-transporter">${d.transporterName}${d.vehicleType ? ' · ' + d.vehicleType : ''}${d.transporterPhone ? ' · ' + d.transporterPhone : ''}</div>` : ''}
     ${d.deliveryFee != null ? `<div class="delivery-fee">Delivery fee: TZS ${Number(d.deliveryFee).toLocaleString()}</div>` : ''}
+    ${liveLocationHtml(d)}
   </div>`;
+}
+
+function liveLocationHtml(d){
+  if(!d.currentLat || !d.locationUpdatedAt || (d.status !== 'PickedUp' && d.status !== 'InTransit')) return '';
+  const mins = Math.max(0, Math.round((Date.now() - new Date(d.locationUpdatedAt).getTime()) / 60000));
+  const ago = mins < 1 ? 'just now' : mins === 1 ? '1 min ago' : `${mins} min ago`;
+  return `<a class="delivery-fee" style="display:block; text-decoration:none;" href="https://www.google.com/maps?q=${d.currentLat},${d.currentLng}" target="_blank" rel="noopener">📍 Truck location — updated ${ago}</a>`;
 }
 
 // Creates the delivery job the first time "Request transporter" is chosen.
 // Safe to call again on an existing deal: the unique index on offer_id /
 // purchase_request_id means a second insert is simply ignored.
 async function createDeliveryJob({ offerId, purchaseRequestId, buyerId, farmerId, crop, quantity, unit, pickupLocation, dropoffLocation }){
+  const action = { type: 'createDeliveryJob', offerId, purchaseRequestId, buyerId, farmerId, crop, quantity, unit, pickupLocation, dropoffLocation };
+  if(!navigator.onLine){
+    queueOfflineAction(action);
+    showToast('Offline — transporter request will be sent once you\'re back online');
+    return;
+  }
   const row = {
     offer_id: offerId || null,
     purchase_request_id: purchaseRequestId || null,
@@ -1411,7 +1451,13 @@ async function createDeliveryJob({ offerId, purchaseRequestId, buyerId, farmerId
   };
   const conflictTarget = offerId ? 'offer_id' : 'purchase_request_id';
   const { error } = await sb.from('deliveries').upsert(row, { onConflict: conflictTarget, ignoreDuplicates: true });
-  if(error) showToast('Could not request a transporter: ' + error.message);
+  if(error){
+    queueOfflineAction(action);
+    showToast('Connection issue — transporter request will retry automatically');
+    return;
+  }
+  const table = offerId ? 'offers' : 'purchase_requests';
+  await sb.from(table).update({ delivery_method: 'Request transporter' }).eq('id', offerId || purchaseRequestId);
 }
 
 /* ===================== AUTH ===================== */
@@ -1765,13 +1811,17 @@ async function loadIncomingPurchaseRequests(listingIds){
     sentAt: row.created_at ? row.created_at.slice(0, 10) : '',
     status: row.status,
     deliveryMethod: row.delivery_method,
-    delivery: mapDelivery((row.deliveries || [])[0])
+    delivery: mapDelivery(row.deliveries)
   }));
 }
 
 // Normalizes a raw `deliveries` row (or undefined) into the shape the
 // delivery status card expects.
-function mapDelivery(d){
+function mapDelivery(rel){
+  // PostgREST returns an array for a to-many embed but can return a bare
+  // object once it detects the relation is to-one (which it now is, since
+  // offer_id/purchase_request_id carry a unique constraint) — accept either.
+  const d = Array.isArray(rel) ? rel[0] : rel;
   if(!d) return null;
   return {
     id: d.id,
@@ -1782,8 +1832,129 @@ function mapDelivery(d){
     vehicleType: d.transporters ? d.transporters.vehicle_type : null,
     deliveryFee: d.delivery_fee,
     transporterPayout: d.transporter_payout,
-    platformCommission: d.platform_commission
+    platformCommission: d.platform_commission,
+    currentLat: d.current_latitude,
+    currentLng: d.current_longitude,
+    locationUpdatedAt: d.location_updated_at
   };
+}
+
+/* ===================== SWIPE-BACK GESTURE ===================== */
+function goBack(){
+  if(state.navStack.length){
+    const prev = state.navStack.pop();
+    goToScreen(prev, { isBack: true });
+  } else if(state.currentScreen !== 'screen-home' && !NAV_ROOT_SCREENS.includes(state.currentScreen)){
+    goToScreen('screen-home', { isBack: true });
+  }
+}
+window.addEventListener('popstate', () => goBack());
+
+(function setupSwipeBack(){
+  let startX = null, startY = null, startT = null;
+  function hint(){
+    let el = document.getElementById('swipeBackHint');
+    if(!el){
+      el = document.createElement('div');
+      el.id = 'swipeBackHint';
+      el.className = 'swipe-back-hint';
+      el.textContent = '‹';
+      document.body.appendChild(el);
+    }
+    return el;
+  }
+  document.addEventListener('touchstart', (e) => {
+    const t = e.touches[0];
+    if(t.clientX > 28){ startX = null; return; }
+    startX = t.clientX; startY = t.clientY; startT = Date.now();
+  }, { passive: true });
+  document.addEventListener('touchmove', (e) => {
+    if(startX === null) return;
+    const t = e.touches[0];
+    const dx = t.clientX - startX, dy = Math.abs(t.clientY - startY);
+    if(dx > 30 && dy < 60) hint().classList.add('show');
+  }, { passive: true });
+  document.addEventListener('touchend', (e) => {
+    const h = document.getElementById('swipeBackHint');
+    if(h) h.classList.remove('show');
+    if(startX === null) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - startX, dy = Math.abs(t.clientY - startY), dt = Date.now() - startT;
+    startX = null;
+    if(dx > 70 && dy < 60 && dt < 600) goBack();
+  }, { passive: true });
+})();
+
+/* ===================== OFFLINE ACTION QUEUE ===================== */
+// Rural connectivity drops out often, so requesting a transporter is queued
+// locally when offline and replayed automatically once the connection is
+// back (on 'online', on tab focus, or woken via Background Sync).
+const OFFLINE_QUEUE_KEY = 'shambani_farmer_offline_queue';
+function loadOfflineQueue(){ try { return JSON.parse(localStorage.getItem(OFFLINE_QUEUE_KEY) || '[]'); } catch(e){ return []; } }
+function saveOfflineQueue(q){ try { localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(q)); } catch(e){} }
+function updateOfflineBadge(){
+  const q = loadOfflineQueue();
+  const banner = document.getElementById('offlineBanner');
+  const count = document.getElementById('offlineCount');
+  if(!banner) return;
+  count.textContent = q.length;
+  banner.classList.toggle('show', !navigator.onLine || q.length > 0);
+}
+async function requestBackgroundSync(){
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    if('sync' in reg) await reg.sync.register('flush-queue');
+  } catch(e){}
+}
+function queueOfflineAction(action){
+  const q = loadOfflineQueue();
+  q.push(Object.assign({ id: Date.now() + '-' + Math.random().toString(36).slice(2) }, action));
+  saveOfflineQueue(q);
+  updateOfflineBadge();
+  requestBackgroundSync();
+}
+async function runQueuedAction(action){
+  if(action.type === 'createDeliveryJob'){
+    const row = {
+      offer_id: action.offerId || null,
+      purchase_request_id: action.purchaseRequestId || null,
+      buyer_id: action.buyerId,
+      farmer_id: action.farmerId,
+      crop: action.crop, quantity: action.quantity, unit: action.unit,
+      pickup_location: action.pickupLocation || null,
+      dropoff_location: action.dropoffLocation || null
+    };
+    const conflictTarget = action.offerId ? 'offer_id' : 'purchase_request_id';
+    const { error } = await sb.from('deliveries').upsert(row, { onConflict: conflictTarget, ignoreDuplicates: true });
+    if(error) throw error;
+    const table = action.offerId ? 'offers' : 'purchase_requests';
+    await sb.from(table).update({ delivery_method: 'Request transporter' }).eq('id', action.offerId || action.purchaseRequestId);
+  }
+}
+let flushingQueue = false;
+async function flushOfflineQueue(){
+  if(flushingQueue || !navigator.onLine) return;
+  const q = loadOfflineQueue();
+  if(!q.length) return;
+  flushingQueue = true;
+  const remaining = [];
+  for(const action of q){
+    try { await runQueuedAction(action); }
+    catch(e){ remaining.push(action); }
+  }
+  saveOfflineQueue(remaining);
+  updateOfflineBadge();
+  flushingQueue = false;
+  if(remaining.length < q.length){ await loadListings(); await loadBuyingRequests(); showToast('Synced pending requests'); }
+}
+window.addEventListener('online', flushOfflineQueue);
+window.addEventListener('offline', updateOfflineBadge);
+document.addEventListener('visibilitychange', () => { if(!document.hidden) flushOfflineQueue(); });
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.addEventListener('message', (e) => {
+    if(e.data && e.data.type === 'FLUSH_OFFLINE_QUEUE') flushOfflineQueue();
+    if(e.data && e.data.type === 'PERIODIC_REFRESH'){ loadListings(); loadBuyingRequests(); }
+  });
 }
 
 async function checkSessionOnLoad(){
@@ -2140,8 +2311,13 @@ async function declinePurchaseRequest(id){
 async function setPurchaseRequestDelivery(id, method){
   const pr = state.incomingPurchaseRequests.find(x => x.id === id);
   if(!pr) return;
-  const { error } = await sb.from('purchase_requests').update({ delivery_method: method }).eq('id', id);
-  if(error){ showToast('Could not update delivery method'); return; }
+  // "Request transporter" is offline-safe end-to-end — createDeliveryJob
+  // sets delivery_method itself (immediately, or as part of its queued
+  // replay once back online), so skip the standalone update here for it.
+  if(method !== 'Request transporter'){
+    const { error } = await sb.from('purchase_requests').update({ delivery_method: method }).eq('id', id);
+    if(error){ showToast('Could not update delivery method'); return; }
+  }
   pr.deliveryMethod = method;
   if(method === 'Request transporter' && !pr.delivery){
     const { data: { user } } = await sb.auth.getUser();
@@ -2374,8 +2550,10 @@ function openRequestDetail(id){
 async function setOfferDelivery(buyingRequestId, method){
   const r = state.buyingRequests.find(x => x.id === buyingRequestId);
   if(!r || !r.myOffer) return;
-  const { error } = await sb.from('offers').update({ delivery_method: method }).eq('id', r.myOffer.id);
-  if(error){ showToast('Could not update delivery method'); return; }
+  if(method !== 'Request transporter'){
+    const { error } = await sb.from('offers').update({ delivery_method: method }).eq('id', r.myOffer.id);
+    if(error){ showToast('Could not update delivery method'); return; }
+  }
   r.myOffer.deliveryMethod = method;
   if(method === 'Request transporter' && !r.myOffer.delivery){
     const { data: { user } } = await sb.auth.getUser();
@@ -2586,11 +2764,19 @@ async function saveProfileEdits(){
 
 /* ===================== INIT ===================== */
 setActiveNav('screen-home');
+updateOfflineBadge();
 checkSessionOnLoad();
 
 if('serviceWorker' in navigator){
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js', { scope: '/farmer-app.html' }).catch(() => {});
+    navigator.serviceWorker.register('/sw.js', { scope: '/farmer-app.html' }).then(async (reg) => {
+      try {
+        if('periodicSync' in reg){
+          const status = await navigator.permissions.query({ name: 'periodic-background-sync' });
+          if(status.state === 'granted') await reg.periodicSync.register('refresh-data', { minInterval: 15 * 60 * 1000 });
+        }
+      } catch(e){}
+    }).catch(() => {});
   });
 }
 </script>
