@@ -58,7 +58,10 @@
   .pill{ display:inline-block; padding:3px 9px; border-radius:100px; font-size:11px; font-weight:700; }
   .pill.available, .pill.open, .pill.accepted{ background:var(--green-bg); color:var(--green); }
   .pill.reserved, .pill.pending{ background:#FFF2DA; color:#9A6B12; }
-  .pill.sold, .pill.declined, .pill.withdrawn, .pill.fulfilled{ background:var(--line); color:var(--slate); }
+  .pill.sold, .pill.declined, .pill.withdrawn, .pill.fulfilled, .pill.cancelled{ background:var(--line); color:var(--slate); }
+  .pill.requested, .pill.assigned{ background:#FFF2DA; color:#9A6B12; }
+  .pill.pickedup, .pill.intransit{ background:#E8F0FB; color:#2E5AAC; }
+  .pill.delivered{ background:var(--green-bg); color:var(--green); }
   .mono{ font-family:monospace; font-size:11.5px; color:var(--slate); }
   .empty{ padding:40px; text-align:center; color:var(--slate); font-size:13.5px; }
   .del-btn{ background:none; border:none; color:var(--red); font-size:12px; font-weight:700; cursor:pointer; padding:5px 9px; border-radius:6px; }
@@ -67,6 +70,16 @@
   .denied{ min-height:100vh; display:flex; align-items:center; justify-content:center; flex-direction:column; gap:10px; text-align:center; padding:24px; }
   .denied h2{ margin:0; }
   .denied p{ color:var(--slate); font-size:13.5px; max-width:360px; margin:0; }
+
+  /* ---------- Delivery live map ---------- */
+  .map-row td{ padding:0 !important; }
+  .delivery-map{ height:240px; background:var(--bg); }
+  .leaflet-pin-pickup{ background:var(--green); width:14px; height:14px; border-radius:50%; border:2px solid #fff; box-shadow:0 0 0 1px var(--green); }
+  .leaflet-pin-dropoff{ background:var(--ink); width:14px; height:14px; border-radius:50%; border:2px solid #fff; box-shadow:0 0 0 1px var(--ink); }
+  .leaflet-pin-truck{ font-size:20px; line-height:26px; text-align:center; filter:drop-shadow(0 1px 2px rgba(0,0,0,.35)); }
+  .map-legend{ display:flex; gap:16px; padding:10px 14px; font-size:11.5px; color:var(--slate); background:var(--white); border-top:1px solid var(--line); }
+  .map-legend span{ display:inline-flex; align-items:center; gap:5px; }
+  .map-legend .dot{ width:9px; height:9px; border-radius:50%; display:inline-block; }
 </style>
 </head>
 <body>
@@ -134,10 +147,15 @@ const SECTIONS = [
   { id:'listings', label:'Listings', sub:'Crop listings published by farmers.' },
   { id:'buying_requests', label:'Buying requests', sub:'RFQs posted by buyers.' },
   { id:'offers', label:'Offers', sub:"Farmers' responses to buying requests." },
-  { id:'purchase_requests', label:'Purchase requests', sub:'Direct requests buyers sent from Browse.' }
+  { id:'purchase_requests', label:'Purchase requests', sub:'Direct requests buyers sent from Browse.' },
+  { id:'transporters', label:'Transporters', sub:'Registered delivery transporters.' },
+  { id:'deliveries', label:'Deliveries', sub:'Transporter jobs — status, fees, and live location while on the road.' }
 ];
 let currentSection = 'farmers';
 let sectionCounts = {};
+const deliveriesById = {};
+const openDeliveryMaps = {};
+let deliveriesChannel = null;
 
 function toggleAuthMode(){
   authMode = authMode === 'login' ? 'signup' : 'login';
@@ -181,6 +199,7 @@ async function handleAuthSubmit(){
 }
 
 async function handleLogout(){
+  teardownDeliveriesRealtime();
   await sb.auth.signOut();
   document.getElementById('dashScreen').style.display = 'none';
   document.getElementById('deniedScreen').style.display = 'none';
@@ -236,6 +255,17 @@ function setSection(id){
   document.getElementById('sectionSub').textContent = meta.sub;
   renderSidebar();
   loadCurrentSection();
+  if(id === 'deliveries') setupDeliveriesRealtime(); else teardownDeliveriesRealtime();
+}
+
+function timeAgo(iso){
+  if(!iso) return '-';
+  const mins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
+  if(mins < 1) return 'just now';
+  if(mins < 60) return `${mins}m ago`;
+  const hrs = Math.round(mins / 60);
+  if(hrs < 24) return `${hrs}h ago`;
+  return fmtDate(iso);
 }
 
 function fmtDate(d){
@@ -248,6 +278,8 @@ function esc(v){
 }
 
 async function loadCurrentSection(){
+  if(currentSection === 'deliveries'){ await renderDeliveries(); return; }
+
   const wrap = document.getElementById('tableWrap');
   wrap.innerHTML = '<div class="loading">Loading&hellip;</div>';
 
@@ -309,6 +341,18 @@ async function loadCurrentSection(){
       { h:'Delivery', v:r=>esc(r.delivery_method)||'-' },
       { h:'Created', v:r=>fmtDate(r.created_at) }
     ];
+  } else if(currentSection === 'transporters'){
+    const res = await sb.from('transporters').select('*').order('created_at', { ascending: false });
+    rows = res.data; error = res.error;
+    cols = [
+      { h:'Name', v:r=>esc(r.name) },
+      { h:'Phone', v:r=>esc(r.phone)||'-' },
+      { h:'Vehicle', v:r=>esc(r.vehicle_type)||'-' },
+      { h:'Capacity', v:r=>r.vehicle_capacity ? `${r.vehicle_capacity} ${esc(r.capacity_unit||'')}` : '-' },
+      { h:'Location', v:r=>esc([r.district,r.region].filter(Boolean).join(', '))||'-' },
+      { h:'Verified', v:r=>r.verified ? '<span class="pill available">Yes</span>' : '<span class="pill pending">No</span>' },
+      { h:'Joined', v:r=>fmtDate(r.created_at) }
+    ];
   } else if(currentSection === 'purchase_requests'){
     const res = await sb.from('purchase_requests').select('*, listings(crop)').order('created_at', { ascending: false });
     rows = res.data; error = res.error;
@@ -330,6 +374,164 @@ async function loadCurrentSection(){
     <thead><tr>${cols.map(c => `<th>${c.h}</th>`).join('')}<th></th></tr></thead>
     <tbody>${rows.map(r => `<tr>${cols.map(c => `<td>${c.v(r)}</td>`).join('')}<td><button class="del-btn" onclick="deleteRow('${r.id}')">Delete</button></td></tr>`).join('')}</tbody>
   </table>`;
+}
+
+/* ===================== DELIVERIES / LIVE MAP ===================== */
+let leafletLoadPromise = null;
+function loadLeaflet(){
+  if(window.L) return Promise.resolve();
+  if(leafletLoadPromise) return leafletLoadPromise;
+  leafletLoadPromise = new Promise((resolve, reject) => {
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+    document.head.appendChild(link);
+    const script = document.createElement('script');
+    script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+    script.onload = () => resolve();
+    script.onerror = () => { leafletLoadPromise = null; reject(new Error('Could not load map library')); };
+    document.head.appendChild(script);
+  });
+  return leafletLoadPromise;
+}
+
+async function renderDeliveries(){
+  const wrap = document.getElementById('tableWrap');
+  wrap.innerHTML = '<div class="loading">Loading&hellip;</div>';
+
+  const { data: rows, error } = await sb.from('deliveries')
+    .select('*, farmers(name, latitude, longitude), buyers(business_name, latitude, longitude), transporters(name, phone, vehicle_type)')
+    .order('created_at', { ascending: false });
+
+  if(error){ wrap.innerHTML = `<div class="empty">Could not load: ${esc(error.message)}</div>`; return; }
+  if(!rows || !rows.length){ wrap.innerHTML = '<div class="empty">No deliveries yet.</div>'; return; }
+
+  for(const k in openDeliveryMaps) delete openDeliveryMaps[k];
+  rows.forEach(r => { deliveriesById[r.id] = r; });
+
+  wrap.innerHTML = `<table>
+    <thead><tr><th>Crop</th><th>Route</th><th>Transporter</th><th>Status</th><th>Fee</th><th>Payout</th><th>Location updated</th><th></th><th></th></tr></thead>
+    <tbody>${rows.map(deliveryRowHtml).join('')}</tbody>
+  </table>`;
+}
+
+function deliveryRowHtml(r){
+  const pickupLabel = r.pickup_location || (r.farmers ? r.farmers.name : '') || 'Pickup';
+  const dropoffLabel = r.dropoff_location || (r.buyers ? r.buyers.business_name : '') || 'Drop-off';
+  const hasCoords = r.farmers && r.farmers.latitude != null && r.buyers && r.buyers.latitude != null;
+  const statusClass = (r.status || '').toLowerCase();
+  return `<tr data-delivery-row="${r.id}">
+    <td>${esc(r.crop)}</td>
+    <td>${esc(pickupLabel)} &rarr; ${esc(dropoffLabel)}</td>
+    <td>${r.transporters ? esc(r.transporters.name) + (r.transporters.phone ? ' &middot; ' + esc(r.transporters.phone) : '') : '<span style="color:var(--slate)">Unassigned</span>'}</td>
+    <td><span class="pill ${statusClass}" data-delivery-status="${r.id}">${esc(r.status)}</span></td>
+    <td>${r.delivery_fee != null ? 'TZS ' + Number(r.delivery_fee).toLocaleString() : '-'}</td>
+    <td>${r.transporter_payout != null ? 'TZS ' + Number(r.transporter_payout).toLocaleString() : '-'}</td>
+    <td data-delivery-updated="${r.id}">${r.current_latitude != null ? timeAgo(r.location_updated_at) : '-'}</td>
+    <td>${hasCoords ? `<button class="btn btn-ghost" style="padding:5px 10px; font-size:11.5px;" onclick="toggleDeliveryMap('${r.id}', this)">Map</button>` : ''}</td>
+    <td><button class="del-btn" onclick="deleteRow('${r.id}')">Delete</button></td>
+  </tr>
+  <tr class="map-row" id="mapRow-${r.id}" style="display:none;"><td colspan="9">
+    <div class="delivery-map" id="map-${r.id}"></div>
+    <div class="map-legend">
+      <span><span class="dot" style="background:var(--green);"></span> Pickup — ${esc(pickupLabel)}</span>
+      <span><span class="dot" style="background:var(--ink);"></span> Drop-off — ${esc(dropoffLabel)}</span>
+      <span>🚚 Transporter — updated <span data-delivery-legend-time="${r.id}">${r.current_latitude != null ? timeAgo(r.location_updated_at) : 'not sharing yet'}</span></span>
+    </div>
+  </td></tr>`;
+}
+
+async function toggleDeliveryMap(id, btn){
+  const row = document.getElementById('mapRow-' + id);
+  const showing = row.style.display !== 'none';
+  if(showing){
+    row.style.display = 'none';
+    btn.textContent = 'Map';
+    if(openDeliveryMaps[id]){ openDeliveryMaps[id].map.remove(); delete openDeliveryMaps[id]; }
+    return;
+  }
+  row.style.display = 'table-row';
+  btn.textContent = 'Hide map';
+  await renderDeliveryMap(id);
+}
+
+async function renderDeliveryMap(id){
+  try { await loadLeaflet(); } catch(e){ document.getElementById('map-' + id).innerHTML = '<div class="empty">Could not load the map library.</div>'; return; }
+  const r = deliveriesById[id];
+  const mapEl = document.getElementById('map-' + id);
+  const pickup = r.farmers && r.farmers.latitude != null ? [r.farmers.latitude, r.farmers.longitude] : null;
+  const dropoff = r.buyers && r.buyers.latitude != null ? [r.buyers.latitude, r.buyers.longitude] : null;
+  const current = r.current_latitude != null ? [r.current_latitude, r.current_longitude] : null;
+  const points = [pickup, dropoff, current].filter(Boolean);
+  if(!points.length){ mapEl.innerHTML = '<div class="empty">No location data for this delivery yet.</div>'; return; }
+
+  const map = L.map(mapEl, { attributionControl: false }).setView(points[0], 11);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18 }).addTo(map);
+
+  const layers = {};
+  if(pickup) L.marker(pickup, { icon: L.divIcon({ className: 'leaflet-pin-pickup', iconSize: [14,14] }) }).addTo(map);
+  if(dropoff) L.marker(dropoff, { icon: L.divIcon({ className: 'leaflet-pin-dropoff', iconSize: [14,14] }) }).addTo(map);
+  if(pickup && dropoff) layers.routeLine = L.polyline([pickup, dropoff], { color: '#C7C3B8', weight: 2, dashArray: '5,7' }).addTo(map);
+  if(current){
+    layers.truckMarker = L.marker(current, { icon: L.divIcon({ className: 'leaflet-pin-truck', html: '🚚', iconSize: [26,26] }) }).addTo(map);
+    if(pickup) layers.traveledLine = L.polyline([pickup, current], { color: '#2E7D46', weight: 3 }).addTo(map);
+    if(dropoff) layers.remainingLine = L.polyline([current, dropoff], { color: '#C7C3B8', weight: 2, dashArray: '5,7' }).addTo(map);
+  }
+  map.fitBounds(L.latLngBounds(points), { padding: [28, 28] });
+
+  openDeliveryMaps[id] = { map, layers, pickup, dropoff };
+}
+
+// Called on a realtime update to a delivery that currently has its map open —
+// moves the truck marker and re-draws the traveled/remaining route segments
+// instead of rebuilding the whole map.
+function updateDeliveryMapLive(id){
+  const entry = openDeliveryMaps[id];
+  const r = deliveriesById[id];
+  if(!entry || !r || r.current_latitude == null) return;
+  const current = [r.current_latitude, r.current_longitude];
+  if(entry.layers.truckMarker){
+    entry.layers.truckMarker.setLatLng(current);
+  } else {
+    entry.layers.truckMarker = L.marker(current, { icon: L.divIcon({ className: 'leaflet-pin-truck', html: '🚚', iconSize: [26,26] }) }).addTo(entry.map);
+  }
+  if(entry.pickup){
+    if(entry.layers.traveledLine) entry.layers.traveledLine.setLatLngs([entry.pickup, current]);
+    else entry.layers.traveledLine = L.polyline([entry.pickup, current], { color: '#2E7D46', weight: 3 }).addTo(entry.map);
+  }
+  if(entry.dropoff){
+    if(entry.layers.remainingLine) entry.layers.remainingLine.setLatLngs([current, entry.dropoff]);
+    else entry.layers.remainingLine = L.polyline([current, entry.dropoff], { color: '#C7C3B8', weight: 2, dashArray: '5,7' }).addTo(entry.map);
+  }
+}
+
+function setupDeliveriesRealtime(){
+  if(deliveriesChannel) return;
+  deliveriesChannel = sb.channel('rt-admin-deliveries')
+    .on('postgres_changes', { event: '*', schema: 'marketplace', table: 'deliveries' }, (payload) => {
+      if(currentSection !== 'deliveries') return;
+      const id = payload.new && payload.new.id;
+      if(!id) return;
+      if(payload.eventType === 'DELETE'){ loadCurrentSection(); return; }
+      // Merge scalar changes into the cached row, keeping the joined
+      // farmer/buyer/transporter objects (the payload doesn't carry embeds).
+      deliveriesById[id] = Object.assign({}, deliveriesById[id], payload.new);
+      const statusEl = document.querySelector(`[data-delivery-status="${id}"]`);
+      if(statusEl){
+        statusEl.textContent = payload.new.status;
+        statusEl.className = `pill ${(payload.new.status || '').toLowerCase()}`;
+      }
+      const updatedEl = document.querySelector(`[data-delivery-updated="${id}"]`);
+      if(updatedEl && payload.new.current_latitude != null) updatedEl.textContent = timeAgo(payload.new.location_updated_at);
+      const legendEl = document.querySelector(`[data-delivery-legend-time="${id}"]`);
+      if(legendEl && payload.new.current_latitude != null) legendEl.textContent = timeAgo(payload.new.location_updated_at);
+      updateDeliveryMapLive(id);
+    })
+    .subscribe();
+}
+
+function teardownDeliveriesRealtime(){
+  if(deliveriesChannel){ sb.removeChannel(deliveriesChannel); deliveriesChannel = null; }
 }
 
 async function deleteRow(id){
