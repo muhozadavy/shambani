@@ -85,8 +85,8 @@
 </script>
 <link rel="manifest" href="/manifest-transporter.json" />
 <meta name="theme-color" content="#1A1A1A" />
-<link rel="icon" href="/icons/icon-192.png" />
-<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+<link rel="icon" href="/icons/transporter/icon-192.png" />
+<link rel="apple-touch-icon" href="/icons/transporter/apple-touch-icon.png" />
 <meta name="mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="default" />
@@ -235,6 +235,11 @@
   .progress-track{ height:5px; background:var(--line); border-radius:100px; overflow:hidden; margin-top:9px; }
   .progress-fill{ height:100%; background:var(--yellow); border-radius:100px; }
   .progress-label{ font-size:11px; color:var(--slate); font-weight:600; margin-top:5px; }
+
+  .status-stepper{ display:flex; gap:6px; margin-bottom:10px; }
+  .status-stepper .step{ flex:1; height:5px; border-radius:100px; background:var(--line); }
+  .status-stepper .step.done{ background:var(--yellow); }
+  .status-stepper-label{ font-size:12.5px; font-weight:700; color:var(--ink); }
 
   .unread-dot{
     position:absolute; top:-7px; left:-7px;
@@ -580,6 +585,7 @@
           <div class="detail-stat"><div class="lbl">Delivery fee</div><div class="val" id="jdFee"></div></div>
           <div class="detail-stat"><div class="lbl">Your payout</div><div class="val" id="jdPayout"></div></div>
         </div>
+        <div id="jdStatusStepper" style="margin-bottom:18px;"></div>
         <button class="btn btn-primary" id="jdActionBtn" onclick="advanceJobStatus()"></button>
       </div>
     </div>
@@ -663,6 +669,18 @@ const DELIVERY_STATUS_LABEL = {
 // becomes next — a simple linear progression a transporter walks through.
 const NEXT_STATUS = { Assigned: 'PickedUp', PickedUp: 'InTransit', InTransit: 'Delivered' };
 const ACTION_LABEL = { Assigned: 'Mark picked up', PickedUp: 'Mark in transit', InTransit: 'Mark delivered' };
+
+// A visible 3-step tracker (Picked up / In transit / Delivered) so the
+// current stage is obvious at a glance, on top of the action button's own
+// label changing ("Mark picked up" -> "Mark in transit" -> "Mark delivered").
+const JOB_STEPS = ['PickedUp', 'InTransit', 'Delivered'];
+const JOB_STEP_LABEL = { Assigned: 'Assigned — not picked up yet', PickedUp: 'Picked up', InTransit: 'In transit', Delivered: 'Delivered', Cancelled: 'Cancelled' };
+function statusStepperHtml(status){
+  // Steps "done" = how far past Assigned we are; Assigned itself is step 0.
+  const doneCount = status === 'Cancelled' ? 0 : Math.max(0, JOB_STEPS.indexOf(status) + 1);
+  return `<div class="status-stepper-label">${JOB_STEP_LABEL[status] || status}</div>
+    <div class="status-stepper">${JOB_STEPS.map((s, i) => `<div class="step ${i < doneCount ? 'done' : ''}"></div>`).join('')}</div>`;
+}
 
 function showToast(msg){
   const t = document.getElementById('toast');
@@ -1012,6 +1030,7 @@ function openJobDetail(id, from){
   } else {
     document.getElementById('jdFee').textContent = j.deliveryFee != null ? `TZS ${Number(j.deliveryFee).toLocaleString()}` : '—';
     document.getElementById('jdPayout').textContent = j.payout != null ? `TZS ${Number(j.payout).toLocaleString()}` : '—';
+    document.getElementById('jdStatusStepper').innerHTML = statusStepperHtml(j.status);
     const btn = document.getElementById('jdActionBtn');
     if(j.status === 'Delivered' || j.status === 'Cancelled'){
       btn.style.display = 'none';

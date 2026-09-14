@@ -21,11 +21,10 @@ self.addEventListener('install', (event) => {
   self.skipWaiting();
   // scope is the exact app page this worker was registered for
   // (e.g. "/farmer-app.html", "/buyer-app.html", "/transporter-app.html") —
-  // farmer and buyer have their own icon set; transporter uses the shared
-  // top-level /icons/ set (no dedicated art yet) rather than a missing folder.
+  // each app has its own icon set, so precache the matching one.
   const shellUrl = self.registration.scope;
-  const iconFolder = shellUrl.includes('buyer-app') ? 'buyer' : shellUrl.includes('transporter-app') ? null : 'farmer';
-  const iconPath = (name) => iconFolder ? `/icons/${iconFolder}/${name}` : `/icons/${name}`;
+  const iconFolder = shellUrl.includes('buyer-app') ? 'buyer' : shellUrl.includes('transporter-app') ? 'transporter' : 'farmer';
+  const iconPath = (name) => `/icons/${iconFolder}/${name}`;
   event.waitUntil(
     caches.open(CACHE_VERSION).then((cache) =>
       cache.addAll([
@@ -115,8 +114,8 @@ self.addEventListener('push', (event) => {
   }
 
   const title = data.title || 'Shambani';
-  const iconFolder = self.registration.scope.includes('buyer-app') ? 'buyer' : self.registration.scope.includes('transporter-app') ? null : 'farmer';
-  const iconPath = iconFolder ? `/icons/${iconFolder}/icon-192.png` : '/icons/icon-192.png';
+  const iconFolder = self.registration.scope.includes('buyer-app') ? 'buyer' : self.registration.scope.includes('transporter-app') ? 'transporter' : 'farmer';
+  const iconPath = `/icons/${iconFolder}/icon-192.png`;
   const options = {
     body: data.body || '',
     icon: iconPath,
