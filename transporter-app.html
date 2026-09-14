@@ -381,6 +381,14 @@
   }
   .swipe-back-hint.show{ opacity:1; }
 
+  /* ---------- Pickup/drop-off map ---------- */
+  .delivery-map{ height:200px; background:var(--bg); }
+  .map-legend{ display:flex; gap:14px; padding:9px 14px; font-size:11.5px; color:var(--slate); }
+  .map-legend .dot{ width:9px; height:9px; border-radius:50%; display:inline-block; margin-right:4px; }
+  .leaflet-pin-pickup{ background:var(--green, #2E7D46); width:14px; height:14px; border-radius:50%; border:2px solid #fff; }
+  .leaflet-pin-dropoff{ background:var(--ink); width:14px; height:14px; border-radius:50%; border:2px solid #fff; }
+  .leaflet-pin-truck{ font-size:20px; line-height:26px; text-align:center; filter:drop-shadow(0 1px 2px rgba(0,0,0,.35)); }
+
   /* ---------- Live location sharing ---------- */
   .location-share-card{ background:var(--white); border:1px solid var(--line); border-radius:var(--radius-sm); padding:14px; margin-bottom:16px; display:flex; align-items:center; justify-content:space-between; gap:12px; }
   .location-share-card .ls-text{ font-size:12.5px; color:var(--slate); }
@@ -595,6 +603,15 @@
       <div class="detail-grid">
         <div class="detail-stat"><div class="lbl">Quantity</div><div class="val" id="jdQty"></div></div>
         <div class="detail-stat"><div class="lbl">Status</div><div class="val" id="jdStatus"></div></div>
+      </div>
+
+      <div id="jdMapCard" class="card" style="display:none; padding:0; margin-bottom:16px; overflow:hidden;">
+        <div class="delivery-map" id="jdMap"></div>
+        <div class="map-legend">
+          <span><span class="dot" style="background:var(--green);"></span> Pickup</span>
+          <span><span class="dot" style="background:var(--ink);"></span> Drop-off</span>
+          <span id="jdMapTruckLegend" style="display:none;">🚚 You</span>
+        </div>
       </div>
 
       <div id="jdPartiesWrap"></div>
@@ -941,7 +958,7 @@ async function loadOpenJobs(){
 async function loadMyJobs(){
   const { data: { user } } = await sb.auth.getUser();
   if(!user) return;
-  const { data, error } = await sb.from('deliveries').select('*, buyers(name, business_name, phone, region, district), farmers(name, phone, region, district, village)').eq('transporter_id', user.id).order('updated_at', { ascending: false });
+  const { data, error } = await sb.from('deliveries').select('*, buyers(name, business_name, phone, region, district, latitude, longitude), farmers(name, phone, region, district, village, latitude, longitude)').eq('transporter_id', user.id).order('updated_at', { ascending: false });
   if(error){ showToast('Could not load your jobs'); return; }
   state.myJobs = (data || []).map(mapJob);
 }
@@ -959,8 +976,10 @@ function mapJob(row){
     commissionRate: row.platform_commission_rate,
     commission: row.platform_commission,
     payout: row.transporter_payout,
-    buyer: row.buyers ? { name: row.buyers.business_name || row.buyers.name, phone: row.buyers.phone, location: `${row.buyers.district || ''}, ${row.buyers.region || ''}` } : null,
-    farmer: row.farmers ? { name: row.farmers.name, phone: row.farmers.phone, location: `${row.farmers.village || ''}, ${row.farmers.region || ''}` } : null
+    buyer: row.buyers ? { name: row.buyers.business_name || row.buyers.name, phone: row.buyers.phone, location: `${row.buyers.district || ''}, ${row.buyers.region || ''}`, lat: row.buyers.latitude, lng: row.buyers.longitude } : null,
+    farmer: row.farmers ? { name: row.farmers.name, phone: row.farmers.phone, location: `${row.farmers.village || ''}, ${row.farmers.region || ''}`, lat: row.farmers.latitude, lng: row.farmers.longitude } : null,
+    currentLat: row.current_latitude,
+    currentLng: row.current_longitude
   };
 }
 
@@ -1102,7 +1121,80 @@ function openJobDetail(id, from){
     if(onTheRoad) shareToggle.checked = state.locationSharingJobId === j.id;
   }
 
+  renderJobDetailMap(j);
   goToScreen('screen-job-detail');
+}
+
+/* ===================== PICKUP/DROP-OFF MAP ===================== */
+let jdLeafletLoadPromise = null;
+function loadJdLeaflet(){
+  if(window.L) return Promise.resolve();
+  if(jdLeafletLoadPromise) return jdLeafletLoadPromise;
+  jdLeafletLoadPromise = new Promise((resolve, reject) => {
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+    document.head.appendChild(link);
+    const script = document.createElement('script');
+    script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+    script.onload = () => resolve();
+    script.onerror = () => { jdLeafletLoadPromise = null; reject(new Error('map library failed to load')); };
+    document.head.appendChild(script);
+  });
+  return jdLeafletLoadPromise;
+}
+
+let jdMap = null, jdMapLayers = {};
+// Renders the pickup/drop-off map for the job currently open in the detail
+// screen. Coordinates only come through once a job is assigned to this
+// transporter (RLS keeps farmer/buyer locations private on open jobs), so
+// unassigned jobs simply show no map.
+async function renderJobDetailMap(j){
+  const card = document.getElementById('jdMapCard');
+  const pickup = j.farmer && j.farmer.lat != null ? [j.farmer.lat, j.farmer.lng] : null;
+  const dropoff = j.buyer && j.buyer.lat != null ? [j.buyer.lat, j.buyer.lng] : null;
+
+  if(jdMap){ jdMap.remove(); jdMap = null; jdMapLayers = {}; }
+
+  if(!pickup && !dropoff){ card.style.display = 'none'; return; }
+  card.style.display = 'block';
+
+  try { await loadJdLeaflet(); } catch(e){ document.getElementById('jdMap').innerHTML = '<div class="empty">Map unavailable right now.</div>'; return; }
+  // Guard against the user having navigated away while Leaflet was loading.
+  if(state.currentJobId !== j.id) return;
+
+  const mapEl = document.getElementById('jdMap');
+  mapEl.innerHTML = '';
+  const points = [pickup, dropoff].filter(Boolean);
+  jdMap = L.map(mapEl, { attributionControl: false }).setView(points[0], 12);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18 }).addTo(jdMap);
+
+  if(pickup) L.marker(pickup, { icon: L.divIcon({ className: 'leaflet-pin-pickup', iconSize: [14,14] }) }).addTo(jdMap);
+  if(dropoff) L.marker(dropoff, { icon: L.divIcon({ className: 'leaflet-pin-dropoff', iconSize: [14,14] }) }).addTo(jdMap);
+  if(pickup && dropoff) jdMapLayers.routeLine = L.polyline([pickup, dropoff], { color: '#C7C3B8', weight: 2, dashArray: '5,7' }).addTo(jdMap);
+
+  const truckLegend = document.getElementById('jdMapTruckLegend');
+  const current = j.currentLat != null ? [j.currentLat, j.currentLng] : null;
+  if(current && (j.status === 'PickedUp' || j.status === 'InTransit')){
+    truckLegend.style.display = 'inline-flex';
+    jdMapLayers.truckMarker = L.marker(current, { icon: L.divIcon({ className: 'leaflet-pin-truck', html: '🚚', iconSize: [26,26] }) }).addTo(jdMap);
+    points.push(current);
+  } else {
+    truckLegend.style.display = 'none';
+  }
+
+  jdMap.fitBounds(L.latLngBounds(points), { padding: [24, 24] });
+}
+
+// Called from shareLocationOnce as GPS fixes come in, so the truck marker
+// on an already-open job-detail map slides live instead of waiting for a
+// full re-render.
+function updateJobDetailMapTruck(jobId, lat, lng){
+  if(!jdMap || state.currentJobId !== jobId) return;
+  const current = [lat, lng];
+  if(jdMapLayers.truckMarker) jdMapLayers.truckMarker.setLatLng(current);
+  else jdMapLayers.truckMarker = L.marker(current, { icon: L.divIcon({ className: 'leaflet-pin-truck', html: '🚚', iconSize: [26,26] }) }).addTo(jdMap);
+  document.getElementById('jdMapTruckLegend').style.display = 'inline-flex';
 }
 
 // Claims an open job. Guards against a race with another transporter by
@@ -1433,6 +1525,7 @@ if('serviceWorker' in navigator){
 // long as the driver has the app open on the road.
 let lastLocationWriteAt = 0;
 async function shareLocationOnce(jobId, pos){
+  updateJobDetailMapTruck(jobId, pos.coords.latitude, pos.coords.longitude);
   const now = Date.now();
   if(now - lastLocationWriteAt < 12000) return; // throttle writes to ~every 12s
   lastLocationWriteAt = now;
