@@ -402,6 +402,27 @@
   .ls-toggle .ls-slider{ position:absolute; inset:0; background:var(--line); border-radius:100px; cursor:pointer; transition:background .2s; }
   .ls-toggle .ls-slider::before{ content:''; position:absolute; width:20px; height:20px; left:3px; top:3px; background:var(--white); border-radius:50%; transition:transform .2s; }
   .ls-toggle input:checked + .ls-slider{ background:var(--yellow-dark, var(--yellow)); }
+
+  /* ---------- Drop-off photo proof ---------- */
+  .photo-proof-card{ background:var(--white); border:1px solid var(--line); border-radius:var(--radius-sm); padding:14px; margin-bottom:16px; }
+  .photo-proof-card .pp-title{ font-size:13.5px; font-weight:700; margin-bottom:2px; }
+  .photo-proof-card .pp-text{ font-size:12.5px; color:var(--slate); margin-bottom:10px; }
+  .photo-proof-card .pp-btn{ background:var(--bg); border:1.5px dashed var(--line); border-radius:8px; padding:10px; font-size:12.5px; font-weight:700; color:var(--ink); cursor:pointer; width:100%; text-align:center; }
+  .photo-proof-thumb{ display:block; width:100%; max-width:220px; border-radius:10px; border:1px solid var(--line); }
+
+  /* ---------- Two-way ratings (transporter rates buyer/farmer) ---------- */
+  .rate-party-card{ background:var(--white); border:1px solid var(--line); border-radius:var(--radius-sm); padding:13px; margin-bottom:14px; }
+  .rate-party-card .q{ font-size:12.5px; font-weight:700; margin-bottom:9px; }
+  .rate-party-card .star-row{ display:flex; gap:4px; margin-bottom:10px; }
+  .rate-party-card .star-row .star{ background:none; border:none; font-size:24px; line-height:1; color:var(--line); cursor:pointer; padding:0; }
+  .rate-party-card .star-row .star.active{ color:var(--yellow-dark); }
+  .rate-party-card textarea{ width:100%; border:1.5px solid var(--line); border-radius:8px; padding:9px 11px; font-family:'Inter',sans-serif; font-size:12.5px; resize:vertical; margin-bottom:10px; box-sizing:border-box; }
+  .rate-party-card .rate-actions{ display:flex; justify-content:space-between; align-items:center; gap:10px; }
+  .rate-party-card .later-link{ background:none; border:none; color:var(--slate); font-size:12px; font-weight:600; cursor:pointer; padding:0; }
+  .rate-party-card .submit-rating-btn{ background:var(--ink); color:#fff; border:none; border-radius:8px; padding:8px 16px; font-size:12.5px; font-weight:700; cursor:pointer; }
+  .rate-party-card .submit-rating-btn:disabled{ opacity:.4; cursor:not-allowed; }
+  .rated-party-badge{ font-size:12.5px; font-weight:600; color:var(--green); margin-bottom:14px; }
+  .rated-party-badge .stars{ color:var(--yellow-dark); letter-spacing:1px; }
   .ls-toggle input:checked + .ls-slider::before{ transform:translateX(18px); }
 </style>
 </head>
@@ -637,6 +658,9 @@
         <div id="jdStatusStepper" style="margin-bottom:18px;"></div>
         <div id="jdPickupConfirmBadge" class="pickup-confirm-badge" style="display:none; margin-bottom:14px;"></div>
         <div id="jdDropoffConfirmBadge" class="pickup-confirm-badge" style="display:none; margin-bottom:14px;"></div>
+        <div id="jdPhotoCard" style="display:none;"></div>
+        <input type="file" id="jdPhotoInput" accept="image/*" capture="environment" style="display:none;" onchange="handleDropoffPhotoSelected(this.files[0])" />
+        <div id="jdRatePartiesWrap" style="display:none;"></div>
         <div class="location-share-card" id="jdLocationShareCard" style="display:none;">
           <div>
             <div class="ls-title">Share live location</div>
@@ -720,7 +744,9 @@ const state = {
   navStack: [],
   locationWatchId: null,
   locationSharingJobId: null,
-  wakeLock: null
+  wakeLock: null,
+  pendingPartyRatings: {},
+  dismissedPartyRatings: new Set()
 };
 
 const DELIVERY_STATUS_LABEL = {
@@ -930,7 +956,7 @@ function transporterRowToState(row){
     name: row.name, phone: row.phone,
     vehicleType: row.vehicle_type, vehicleCapacity: row.vehicle_capacity,
     capacityUnit: row.capacity_unit, region: row.region, district: row.district,
-    verified: row.verified
+    verified: row.verified, ratingAvg: row.rating_avg, ratingCount: row.rating_count
   };
 }
 
@@ -990,7 +1016,14 @@ function mapJob(row){
     pickupConfirmedByFarmer: row.pickup_confirmed_by_farmer,
     dropoffConfirmedByBuyer: row.dropoff_confirmed_by_buyer,
     rating: row.delivery_rating,
-    ratingComment: row.delivery_rating_comment
+    ratingComment: row.delivery_rating_comment,
+    dropoffPhotoUrl: row.dropoff_photo_url,
+    buyerId: row.buyer_id,
+    farmerId: row.farmer_id,
+    ratingOfBuyer: row.transporter_rating_of_buyer,
+    ratingOfBuyerComment: row.transporter_rating_of_buyer_comment,
+    ratingOfFarmer: row.transporter_rating_of_farmer,
+    ratingOfFarmerComment: row.transporter_rating_of_farmer_comment
   };
 }
 
@@ -1077,6 +1110,55 @@ function renderMyJobs(){
         </div>
       </div>`).join('')
     : emptyStateHtml('Nothing here yet', 'Jobs you accept will show up in this list.');
+}
+
+function esc(v){
+  return String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+}
+
+/* ===================== PHOTOS (Supabase Storage) ===================== */
+// Resizes/re-encodes an image client-side before upload — transporters are
+// often on slow mobile data and phone cameras produce multi-MB originals.
+function compressImage(file, maxDim = 1280, quality = 0.82){
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Could not read photo'));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('Could not read photo'));
+      img.onload = () => {
+        let { width, height } = img;
+        if(width > maxDim || height > maxDim){
+          const scale = maxDim / Math.max(width, height);
+          width = Math.round(width * scale);
+          height = Math.round(height * scale);
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width; canvas.height = height;
+        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+        canvas.toBlob(blob => {
+          if(!blob){ reject(new Error('Could not process photo')); return; }
+          resolve(blob);
+        }, 'image/jpeg', quality);
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+// kind is always 'deliveries' here; path is {ownerId}/deliveries/{jobId}.jpg
+// so the storage RLS policy (own-folder write, public read) matches without
+// any extra wiring, and re-uploading the same job's photo just overwrites it.
+async function uploadPhoto(file, kind, jobId){
+  const { data: { user } } = await sb.auth.getUser();
+  if(!user) throw new Error('Session expired, please sign in again');
+  const blob = await compressImage(file);
+  const path = `${user.id}/${kind}/${jobId}.jpg`;
+  const { error } = await sb.storage.from('shambani-photos').upload(path, blob, { contentType: 'image/jpeg', upsert: true });
+  if(error) throw new Error(error.message);
+  const { data } = sb.storage.from('shambani-photos').getPublicUrl(path);
+  return `${data.publicUrl}?v=${Date.now()}`;
 }
 
 /* ===================== JOB DETAIL ===================== */
@@ -1168,10 +1250,120 @@ function openJobDetail(id, from){
         dropoffBadge.textContent = '✓ Buyer confirmed delivery';
       }
     }
+
+    renderPhotoCard(j);
+    renderRatePartiesWrap(j);
   }
 
   renderJobDetailMap(j);
   goToScreen('screen-job-detail');
+}
+
+// Optional drop-off photo proof. Available once the job is on the road so
+// it can be taken right at hand-off; never blocks status updates either way.
+function renderPhotoCard(j){
+  const wrap = document.getElementById('jdPhotoCard');
+  const onTheRoadOrDone = j.status === 'PickedUp' || j.status === 'InTransit' || j.status === 'Delivered';
+  if(!onTheRoadOrDone){ wrap.style.display = 'none'; wrap.innerHTML = ''; return; }
+  wrap.style.display = 'block';
+  if(j.dropoffPhotoUrl){
+    wrap.innerHTML = `<div class="photo-proof-card">
+      <div class="pp-title">Delivery photo</div>
+      <a href="${j.dropoffPhotoUrl}" target="_blank" rel="noopener"><img src="${j.dropoffPhotoUrl}" alt="Delivery photo" class="photo-proof-thumb" /></a>
+    </div>`;
+  } else {
+    wrap.innerHTML = `<div class="photo-proof-card">
+      <div class="pp-title">Drop-off photo</div>
+      <div class="pp-text">Add a photo as proof of delivery (optional).</div>
+      <button type="button" class="pp-btn" onclick="document.getElementById('jdPhotoInput').click()">📷 Take / choose photo</button>
+    </div>`;
+  }
+}
+
+async function handleDropoffPhotoSelected(file){
+  if(!file) return;
+  const j = findJob(state.currentJobId);
+  if(!j) return;
+  try {
+    const url = await uploadPhoto(file, 'deliveries', j.id);
+    const { error } = await sb.from('deliveries').update({ dropoff_photo_url: url }).eq('id', j.id);
+    if(error){ showToast('Could not save photo: ' + error.message); return; }
+    showToast('Photo saved');
+    await loadMyJobs();
+    openJobDetail(j.id, state.detailFrom);
+  } catch(e){
+    showToast(e.message || 'Could not upload photo');
+  } finally {
+    document.getElementById('jdPhotoInput').value = '';
+  }
+}
+
+// Two-way ratings: once a job is Delivered, the transporter can rate how
+// the pickup (farmer) and drop-off (buyer) went — soft/optional, same
+// pattern as the buyer's rating of the transporter.
+function renderRatePartiesWrap(j){
+  const wrap = document.getElementById('jdRatePartiesWrap');
+  if(j.status !== 'Delivered'){ wrap.style.display = 'none'; wrap.innerHTML = ''; return; }
+  wrap.style.display = 'block';
+  wrap.innerHTML = ratePartyHtml(j, 'farmer', 'Rate the pickup (farmer)') + ratePartyHtml(j, 'buyer', 'Rate the drop-off (buyer)');
+}
+
+function ratePartyHtml(j, party, question){
+  const rating = party === 'farmer' ? j.ratingOfFarmer : j.ratingOfBuyer;
+  const comment = party === 'farmer' ? j.ratingOfFarmerComment : j.ratingOfBuyerComment;
+  const dismissKey = `${j.id}-${party}`;
+  if(rating != null){
+    return `<div class="rated-party-badge">✓ ${question} <span class="stars">${'★'.repeat(rating)}${'☆'.repeat(5 - rating)}</span>${comment ? `<div style="font-weight:400; color:var(--slate); font-size:12px; margin-top:3px;">"${esc(comment)}"</div>` : ''}</div>`;
+  }
+  if(state.dismissedPartyRatings && state.dismissedPartyRatings.has(dismissKey)){
+    return `<button class="rate-later-link" style="background:none; border:none; color:var(--yellow-dark); font-size:12px; font-weight:700; cursor:pointer; padding:0; margin-bottom:14px; display:block;" onclick="state.dismissedPartyRatings.delete('${dismissKey}'); refreshAfterRealtime();">${question}</button>`;
+  }
+  return `<div class="rate-party-card" data-rate-party="${dismissKey}">
+    <div class="q">${question}</div>
+    <div class="star-row" id="partyStars-${dismissKey}">
+      ${[1,2,3,4,5].map(n => `<button type="button" class="star" data-star="${n}" onclick="setPartyStarRating('${j.id}', '${party}', ${n})">★</button>`).join('')}
+    </div>
+    <textarea id="partyComment-${dismissKey}" rows="2" placeholder="Anything you'd like to add? (optional)"></textarea>
+    <div class="rate-actions">
+      <button class="later-link" onclick="dismissPartyRating('${j.id}', '${party}')">Maybe later</button>
+      <button class="submit-rating-btn" id="submitPartyRating-${dismissKey}" onclick="submitPartyRating('${j.id}', '${party}')" disabled>Submit</button>
+    </div>
+  </div>`;
+}
+
+function setPartyStarRating(jobId, party, n){
+  const key = `${jobId}-${party}`;
+  state.pendingPartyRatings = state.pendingPartyRatings || {};
+  state.pendingPartyRatings[key] = n;
+  document.querySelectorAll(`#partyStars-${key} .star`).forEach((el, idx) => {
+    el.classList.toggle('active', idx < n);
+  });
+  const btn = document.getElementById(`submitPartyRating-${key}`);
+  if(btn) btn.disabled = false;
+}
+
+function dismissPartyRating(jobId, party){
+  const key = `${jobId}-${party}`;
+  state.dismissedPartyRatings = state.dismissedPartyRatings || new Set();
+  state.dismissedPartyRatings.add(key);
+  refreshAfterRealtime();
+}
+
+async function submitPartyRating(jobId, party){
+  const key = `${jobId}-${party}`;
+  const rating = state.pendingPartyRatings && state.pendingPartyRatings[key];
+  if(!rating) return;
+  const commentEl = document.getElementById(`partyComment-${key}`);
+  const comment = commentEl ? commentEl.value.trim() : '';
+  const update = party === 'farmer'
+    ? { transporter_rating_of_farmer: rating, transporter_rating_of_farmer_comment: comment || null, transporter_rated_farmer_at: new Date().toISOString() }
+    : { transporter_rating_of_buyer: rating, transporter_rating_of_buyer_comment: comment || null, transporter_rated_buyer_at: new Date().toISOString() };
+  const { error } = await sb.from('deliveries').update(update).eq('id', jobId);
+  if(error){ showToast('Could not save rating: ' + error.message); return; }
+  delete state.pendingPartyRatings[key];
+  showToast('Thanks for rating!');
+  await loadMyJobs();
+  openJobDetail(jobId, state.detailFrom);
 }
 
 /* ===================== PICKUP/DROP-OFF MAP ===================== */
@@ -1325,9 +1517,8 @@ function renderProfile(){
   document.getElementById('profileCapacity').textContent = t.vehicleCapacity ? `${t.vehicleCapacity} ${t.capacityUnit || 'kg'}` : '—';
   const totalEarned = state.myJobs.filter(j => j.status === 'Delivered').reduce((sum, j) => sum + (Number(j.payout) || 0), 0);
   document.getElementById('profileEarnings').textContent = `TZS ${totalEarned.toLocaleString()}`;
-  const ratings = state.myJobs.map(j => j.rating).filter(r => r != null);
-  document.getElementById('profileRating').textContent = ratings.length
-    ? `★ ${(ratings.reduce((a, b) => a + b, 0) / ratings.length).toFixed(1)} (${ratings.length})`
+  document.getElementById('profileRating').textContent = t.ratingAvg != null
+    ? `★ ${Number(t.ratingAvg).toFixed(1)} (${t.ratingCount})`
     : 'No ratings yet';
   refreshPushNotifStatus();
 }
@@ -1436,6 +1627,7 @@ function setupRealtime(){
   const refreshAll = debounce(async () => {
     await loadOpenJobs();
     await loadMyJobs();
+    await refreshOwnRating();
     refreshAfterRealtime();
   }, 400);
 
@@ -1456,6 +1648,17 @@ function refreshAfterRealtime(){
   else if(s === 'screen-job-detail' && state.currentJobId){
     if(findJob(state.currentJobId)) openJobDetail(state.currentJobId, state.detailFrom);
   }
+  else if(s === 'screen-profile') renderProfile();
+}
+
+// A delivery-table change can be a fresh rating for this transporter, which
+// lives on the transporters row (not the delivery), so pull it separately.
+async function refreshOwnRating(){
+  if(!state.transporter) return;
+  const { data: { user } } = await sb.auth.getUser();
+  if(!user) return;
+  const { data: row } = await sb.from('transporters').select('rating_avg, rating_count').eq('id', user.id).maybeSingle();
+  if(row){ state.transporter.ratingAvg = row.rating_avg; state.transporter.ratingCount = row.rating_count; }
 }
 
 /* ===================== SWIPE-BACK GESTURE ===================== */

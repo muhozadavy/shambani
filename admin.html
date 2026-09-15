@@ -81,6 +81,9 @@
   .map-legend{ display:flex; gap:16px; padding:10px 14px; font-size:11.5px; color:var(--slate); background:var(--white); border-top:1px solid var(--line); }
   .map-legend span{ display:inline-flex; align-items:center; gap:5px; }
   .map-legend .dot{ width:9px; height:9px; border-radius:50%; display:inline-block; }
+  .map-extra{ display:flex; flex-wrap:wrap; gap:18px; padding:12px 14px; font-size:12px; background:var(--white); border-top:1px solid var(--line); }
+  .map-extra-item .lbl{ color:var(--slate); font-size:11px; margin-bottom:4px; }
+  .map-extra-photo{ width:70px; height:70px; object-fit:cover; border-radius:8px; border:1px solid var(--line); display:block; }
 </style>
 </head>
 <body>
@@ -401,7 +404,7 @@ async function renderDeliveries(){
   wrap.innerHTML = '<div class="loading">Loading&hellip;</div>';
 
   const { data: rows, error } = await sb.from('deliveries')
-    .select('*, farmers(name, latitude, longitude), buyers(business_name, latitude, longitude), transporters(name, phone, vehicle_type)')
+    .select('*, farmers(name, latitude, longitude), buyers(business_name, latitude, longitude), transporters(name, phone, vehicle_type, rating_avg, rating_count)')
     .order('created_at', { ascending: false });
 
   if(error){ wrap.innerHTML = `<div class="empty">Could not load: ${esc(error.message)}</div>`; return; }
@@ -442,7 +445,7 @@ function deliveryRowHtml(r){
   return `<tr data-delivery-row="${r.id}">
     <td>${esc(r.crop)}</td>
     <td>${esc(pickupLabel)} &rarr; ${esc(dropoffLabel)}</td>
-    <td>${r.transporters ? esc(r.transporters.name) + (r.transporters.phone ? ' &middot; ' + esc(r.transporters.phone) : '') : '<span style="color:var(--slate)">Unassigned</span>'}</td>
+    <td>${r.transporters ? esc(r.transporters.name) + (r.transporters.phone ? ' &middot; ' + esc(r.transporters.phone) : '') + (r.transporters.rating_avg != null ? ' &middot; <span style="color:var(--yellow-dark, #F0A82E); font-weight:600;">&#9733; ' + Number(r.transporters.rating_avg).toFixed(1) + '</span>' : '') : '<span style="color:var(--slate)">Unassigned</span>'}</td>
     <td><span class="pill ${statusClass}" data-delivery-status="${r.id}">${esc(r.status)}</span></td>
     <td data-delivery-pickup-confirm="${r.id}">${pickupConfirmCellHtml(r)}</td>
     <td data-delivery-dropoff-confirm="${r.id}">${dropoffConfirmCellHtml(r)}</td>
@@ -460,7 +463,29 @@ function deliveryRowHtml(r){
       <span><span class="dot" style="background:var(--ink);"></span> Drop-off — ${esc(dropoffLabel)}</span>
       <span>🚚 Transporter — updated <span data-delivery-legend-time="${r.id}">${r.current_latitude != null ? timeAgo(r.location_updated_at) : 'not sharing yet'}</span></span>
     </div>
+    <div data-delivery-extra="${r.id}">${deliveryExtraHtml(r)}</div>
   </td></tr>`;
+}
+
+// Photo proof + the two-way ratings (transporter → buyer, transporter →
+// farmer) shown below the map when a row is expanded, rather than crowding
+// the table with more columns.
+function deliveryExtraHtml(r){
+  const parts = [];
+  if(r.dropoff_photo_url){
+    parts.push(`<div class="map-extra-item"><div class="lbl">Drop-off photo</div><a href="${r.dropoff_photo_url}" target="_blank" rel="noopener"><img src="${r.dropoff_photo_url}" class="map-extra-photo" alt="Delivery photo" /></a></div>`);
+  }
+  if(r.delivery_rating != null && r.delivery_rating <= 2 && r.delivery_rating_reason && r.delivery_rating_reason.length){
+    parts.push(`<div class="map-extra-item"><div class="lbl">Buyer flagged</div><div>${r.delivery_rating_reason.map(t => `<span class="pill flagged" style="margin-right:4px;">${esc(t)}</span>`).join('')}</div></div>`);
+  }
+  if(r.transporter_rating_of_farmer != null){
+    parts.push(`<div class="map-extra-item"><div class="lbl">Transporter rated farmer</div><div>${'★'.repeat(r.transporter_rating_of_farmer)}${'☆'.repeat(5 - r.transporter_rating_of_farmer)}${r.transporter_rating_of_farmer_comment ? ' — "' + esc(r.transporter_rating_of_farmer_comment) + '"' : ''}</div></div>`);
+  }
+  if(r.transporter_rating_of_buyer != null){
+    parts.push(`<div class="map-extra-item"><div class="lbl">Transporter rated buyer</div><div>${'★'.repeat(r.transporter_rating_of_buyer)}${'☆'.repeat(5 - r.transporter_rating_of_buyer)}${r.transporter_rating_of_buyer_comment ? ' — "' + esc(r.transporter_rating_of_buyer_comment) + '"' : ''}</div></div>`);
+  }
+  if(!parts.length) return '';
+  return `<div class="map-extra">${parts.join('')}</div>`;
 }
 
 async function toggleDeliveryMap(id, btn){
@@ -553,6 +578,8 @@ function setupDeliveriesRealtime(){
       if(dropoffEl) dropoffEl.innerHTML = dropoffConfirmCellHtml(deliveriesById[id]);
       const ratingEl = document.querySelector(`[data-delivery-rating="${id}"]`);
       if(ratingEl) ratingEl.innerHTML = ratingCellHtml(deliveriesById[id]);
+      const extraEl = document.querySelector(`[data-delivery-extra="${id}"]`);
+      if(extraEl) extraEl.innerHTML = deliveryExtraHtml(deliveriesById[id]);
       updateDeliveryMapLive(id);
     })
     .subscribe();

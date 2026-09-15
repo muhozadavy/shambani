@@ -304,6 +304,8 @@
   .pickup-confirm-badge.flagged{ color:var(--red); }
   .rated-badge{ font-size:12.5px; font-weight:600; margin-top:10px; }
   .rated-badge .stars{ color:var(--yellow-dark); letter-spacing:1px; }
+  .transporter-rating{ color:var(--yellow-dark); font-weight:700; }
+  .dropoff-photo-thumb{ display:block; width:100%; max-width:220px; border-radius:10px; margin-top:10px; border:1px solid var(--line); }
 
   .icon{ width:20px; height:20px; display:inline-block; flex-shrink:0; }
 
@@ -1298,7 +1300,7 @@ async function loadBuyingRequests(){
     (progressRows || []).forEach(p => { progressMap[p.buying_request_id] = p.matched_qty || 0; });
   }
 
-  const { data: myOfferRows } = await sb.from('offers').select('*, deliveries(*, transporters(name, phone, vehicle_type))').eq('farmer_id', user.id);
+  const { data: myOfferRows } = await sb.from('offers').select('*, deliveries(*, transporters(name, phone, vehicle_type, rating_avg, rating_count))').eq('farmer_id', user.id);
   const myOfferMap = {};
   (myOfferRows || []).forEach(o => {
     if(o.status === 'Pending' || o.status === 'Accepted'){
@@ -1428,7 +1430,7 @@ function deliveryStatusHtml(d){
   return `<div class="delivery-status-card ${cancelled ? 'cancelled' : ''}">
     <div class="delivery-status-title">🚚 ${DELIVERY_STATUS_LABEL[d.status] || d.status}</div>
     ${!cancelled ? `<div class="progress-track"><div class="progress-fill" style="width:${pct}%;"></div></div>` : ''}
-    ${d.transporterName ? `<div class="delivery-transporter">${d.transporterName}${d.vehicleType ? ' · ' + d.vehicleType : ''}${d.transporterPhone ? ' · ' + d.transporterPhone : ''}</div>` : ''}
+    ${d.transporterName ? `<div class="delivery-transporter">${d.transporterName}${d.vehicleType ? ' · ' + d.vehicleType : ''}${d.transporterPhone ? ' · ' + d.transporterPhone : ''}${d.transporterRatingAvg != null ? ` · <span class="transporter-rating">★ ${Number(d.transporterRatingAvg).toFixed(1)} (${d.transporterRatingCount})</span>` : ''}</div>` : ''}
     ${d.deliveryFee != null ? `<div class="delivery-fee">Delivery fee: TZS ${Number(d.deliveryFee).toLocaleString()}</div>` : ''}
     ${liveLocationHtml(d)}
     ${pickupConfirmHtml(d)}
@@ -1440,11 +1442,16 @@ function deliveryStatusHtml(d){
 // drop-off and rate the delivery, this is just a trust signal.
 function dropoffConfirmBadgeHtml(d){
   if(d.dropoffConfirmedByBuyer == null) return '';
-  if(d.dropoffConfirmedByBuyer === false) return `<div class="pickup-confirm-badge flagged">⚠ Buyer flagged this delivery</div>`;
+  if(d.dropoffConfirmedByBuyer === false) return `<div class="pickup-confirm-badge flagged">⚠ Buyer flagged this delivery</div>${dropoffPhotoHtml(d)}`;
   if(d.deliveryRating != null){
-    return `<div class="rated-badge">✓ Delivered <span class="stars">${'★'.repeat(d.deliveryRating)}${'☆'.repeat(5 - d.deliveryRating)}</span></div>`;
+    return `<div class="rated-badge">✓ Delivered <span class="stars">${'★'.repeat(d.deliveryRating)}${'☆'.repeat(5 - d.deliveryRating)}</span></div>${dropoffPhotoHtml(d)}`;
   }
-  return `<div class="pickup-confirm-badge ok">✓ Buyer confirmed delivery</div>`;
+  return `<div class="pickup-confirm-badge ok">✓ Buyer confirmed delivery</div>${dropoffPhotoHtml(d)}`;
+}
+
+function dropoffPhotoHtml(d){
+  if(!d.dropoffPhotoUrl) return '';
+  return `<a href="${d.dropoffPhotoUrl}" target="_blank" rel="noopener" class="dropoff-photo-link"><img src="${d.dropoffPhotoUrl}" alt="Delivery photo" class="dropoff-photo-thumb" /></a>`;
 }
 
 // A lightweight, non-blocking check: once the transporter marks a job
@@ -1849,7 +1856,7 @@ async function loadListings(){
 
 async function loadIncomingPurchaseRequests(listingIds){
   if(!listingIds.length){ state.incomingPurchaseRequests = []; return; }
-  const { data, error } = await sb.from('purchase_requests').select('*, listings(crop), deliveries(*, transporters(name, phone, vehicle_type))').in('listing_id', listingIds).order('created_at', { ascending: false });
+  const { data, error } = await sb.from('purchase_requests').select('*, listings(crop), deliveries(*, transporters(name, phone, vehicle_type, rating_avg, rating_count))').in('listing_id', listingIds).order('created_at', { ascending: false });
   if(error){ showToast('Could not load buyer interest'); return; }
   state.incomingPurchaseRequests = (data || []).map(row => ({
     id: row.id,
@@ -1886,6 +1893,8 @@ function mapDelivery(rel){
     transporterName: d.transporters ? d.transporters.name : null,
     transporterPhone: d.transporters ? d.transporters.phone : null,
     vehicleType: d.transporters ? d.transporters.vehicle_type : null,
+    transporterRatingAvg: d.transporters ? d.transporters.rating_avg : null,
+    transporterRatingCount: d.transporters ? d.transporters.rating_count : null,
     deliveryFee: d.delivery_fee,
     transporterPayout: d.transporter_payout,
     platformCommission: d.platform_commission,
@@ -1894,6 +1903,7 @@ function mapDelivery(rel){
     locationUpdatedAt: d.location_updated_at,
     pickupConfirmedByFarmer: d.pickup_confirmed_by_farmer,
     dropoffConfirmedByBuyer: d.dropoff_confirmed_by_buyer,
+    dropoffPhotoUrl: d.dropoff_photo_url,
     deliveryRating: d.delivery_rating
   };
 }
