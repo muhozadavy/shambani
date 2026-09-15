@@ -302,6 +302,8 @@
   .pickup-confirm-badge{ font-size:12px; font-weight:600; margin-top:10px; display:flex; align-items:center; gap:5px; }
   .pickup-confirm-badge.ok{ color:var(--green); }
   .pickup-confirm-badge.flagged{ color:var(--red); }
+  .rated-badge{ font-size:12.5px; font-weight:600; margin-top:10px; }
+  .rated-badge .stars{ color:var(--yellow-dark); letter-spacing:1px; }
 
   .icon{ width:20px; height:20px; display:inline-block; flex-shrink:0; }
 
@@ -1430,7 +1432,19 @@ function deliveryStatusHtml(d){
     ${d.deliveryFee != null ? `<div class="delivery-fee">Delivery fee: TZS ${Number(d.deliveryFee).toLocaleString()}</div>` : ''}
     ${liveLocationHtml(d)}
     ${pickupConfirmHtml(d)}
+    ${dropoffConfirmBadgeHtml(d)}
   </div>`;
+}
+
+// Read-only for the farmer — the buyer is the one asked to confirm
+// drop-off and rate the delivery, this is just a trust signal.
+function dropoffConfirmBadgeHtml(d){
+  if(d.dropoffConfirmedByBuyer == null) return '';
+  if(d.dropoffConfirmedByBuyer === false) return `<div class="pickup-confirm-badge flagged">⚠ Buyer flagged this delivery</div>`;
+  if(d.deliveryRating != null){
+    return `<div class="rated-badge">✓ Delivered <span class="stars">${'★'.repeat(d.deliveryRating)}${'☆'.repeat(5 - d.deliveryRating)}</span></div>`;
+  }
+  return `<div class="pickup-confirm-badge ok">✓ Buyer confirmed delivery</div>`;
 }
 
 // A lightweight, non-blocking check: once the transporter marks a job
@@ -1878,7 +1892,9 @@ function mapDelivery(rel){
     currentLat: d.current_latitude,
     currentLng: d.current_longitude,
     locationUpdatedAt: d.location_updated_at,
-    pickupConfirmedByFarmer: d.pickup_confirmed_by_farmer
+    pickupConfirmedByFarmer: d.pickup_confirmed_by_farmer,
+    dropoffConfirmedByBuyer: d.dropoff_confirmed_by_buyer,
+    deliveryRating: d.delivery_rating
   };
 }
 

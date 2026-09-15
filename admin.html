@@ -411,7 +411,7 @@ async function renderDeliveries(){
   rows.forEach(r => { deliveriesById[r.id] = r; });
 
   wrap.innerHTML = `<table>
-    <thead><tr><th>Crop</th><th>Route</th><th>Transporter</th><th>Status</th><th>Pickup confirmed</th><th>Fee</th><th>Payout</th><th>Location updated</th><th></th><th></th></tr></thead>
+    <thead><tr><th>Crop</th><th>Route</th><th>Transporter</th><th>Status</th><th>Pickup</th><th>Drop-off</th><th>Rating</th><th>Fee</th><th>Payout</th><th>Location updated</th><th></th><th></th></tr></thead>
     <tbody>${rows.map(deliveryRowHtml).join('')}</tbody>
   </table>`;
 }
@@ -421,6 +421,17 @@ function pickupConfirmCellHtml(r){
   if(!pastPickup) return '<span style="color:var(--slate)">-</span>';
   if(r.pickup_confirmed_by_farmer == null) return '<span class="pill pending">Waiting</span>';
   return r.pickup_confirmed_by_farmer ? '<span class="pill available">Confirmed</span>' : '<span class="pill flagged">Flagged</span>';
+}
+
+function dropoffConfirmCellHtml(r){
+  if(r.status !== 'Delivered') return '<span style="color:var(--slate)">-</span>';
+  if(r.dropoff_confirmed_by_buyer == null) return '<span class="pill pending">Waiting</span>';
+  return r.dropoff_confirmed_by_buyer ? '<span class="pill available">Confirmed</span>' : '<span class="pill flagged">Flagged</span>';
+}
+
+function ratingCellHtml(r){
+  if(r.delivery_rating == null) return '<span style="color:var(--slate)">-</span>';
+  return `<span title="${r.delivery_rating}/5">${'★'.repeat(r.delivery_rating)}${'☆'.repeat(5 - r.delivery_rating)}</span>`;
 }
 
 function deliveryRowHtml(r){
@@ -434,13 +445,15 @@ function deliveryRowHtml(r){
     <td>${r.transporters ? esc(r.transporters.name) + (r.transporters.phone ? ' &middot; ' + esc(r.transporters.phone) : '') : '<span style="color:var(--slate)">Unassigned</span>'}</td>
     <td><span class="pill ${statusClass}" data-delivery-status="${r.id}">${esc(r.status)}</span></td>
     <td data-delivery-pickup-confirm="${r.id}">${pickupConfirmCellHtml(r)}</td>
+    <td data-delivery-dropoff-confirm="${r.id}">${dropoffConfirmCellHtml(r)}</td>
+    <td data-delivery-rating="${r.id}">${ratingCellHtml(r)}</td>
     <td>${r.delivery_fee != null ? 'TZS ' + Number(r.delivery_fee).toLocaleString() : '-'}</td>
     <td>${r.transporter_payout != null ? 'TZS ' + Number(r.transporter_payout).toLocaleString() : '-'}</td>
     <td data-delivery-updated="${r.id}">${r.current_latitude != null ? timeAgo(r.location_updated_at) : '-'}</td>
     <td>${hasCoords ? `<button class="btn btn-ghost" style="padding:5px 10px; font-size:11.5px;" onclick="toggleDeliveryMap('${r.id}', this)">Map</button>` : ''}</td>
     <td><button class="del-btn" onclick="deleteRow('${r.id}')">Delete</button></td>
   </tr>
-  <tr class="map-row" id="mapRow-${r.id}" style="display:none;"><td colspan="10">
+  <tr class="map-row" id="mapRow-${r.id}" style="display:none;"><td colspan="12">
     <div class="delivery-map" id="map-${r.id}"></div>
     <div class="map-legend">
       <span><span class="dot" style="background:var(--green);"></span> Pickup — ${esc(pickupLabel)}</span>
@@ -536,6 +549,10 @@ function setupDeliveriesRealtime(){
       if(legendEl && payload.new.current_latitude != null) legendEl.textContent = timeAgo(payload.new.location_updated_at);
       const pickupEl = document.querySelector(`[data-delivery-pickup-confirm="${id}"]`);
       if(pickupEl) pickupEl.innerHTML = pickupConfirmCellHtml(deliveriesById[id]);
+      const dropoffEl = document.querySelector(`[data-delivery-dropoff-confirm="${id}"]`);
+      if(dropoffEl) dropoffEl.innerHTML = dropoffConfirmCellHtml(deliveriesById[id]);
+      const ratingEl = document.querySelector(`[data-delivery-rating="${id}"]`);
+      if(ratingEl) ratingEl.innerHTML = ratingCellHtml(deliveriesById[id]);
       updateDeliveryMapLive(id);
     })
     .subscribe();

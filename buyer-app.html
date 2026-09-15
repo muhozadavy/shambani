@@ -421,6 +421,28 @@
   .pickup-confirm-badge.ok{ color:var(--green); }
   .pickup-confirm-badge.flagged{ color:var(--red); }
 
+  .dropoff-confirm{ background:#FFF8EA; border:1px solid #F0DCA8; border-radius:var(--radius-sm); padding:11px 13px; margin-top:12px; }
+  .dropoff-confirm .q{ font-size:12.5px; font-weight:600; margin-bottom:9px; }
+  .dropoff-confirm-btns{ display:flex; gap:8px; }
+  .dropoff-confirm-btns button{ flex:1; padding:8px; border-radius:8px; border:1.5px solid var(--line); background:var(--white); font-size:12.5px; font-weight:700; cursor:pointer; }
+  .dropoff-confirm-btns button.yes{ border-color:var(--green); color:var(--green); }
+  .dropoff-confirm-btns button.no{ border-color:var(--red); color:var(--red); }
+
+  .rate-card{ background:var(--white); border:1px solid var(--line); border-radius:var(--radius-sm); padding:13px; margin-top:12px; }
+  .rate-card .q{ font-size:12.5px; font-weight:700; margin-bottom:9px; }
+  .star-row{ display:flex; gap:4px; margin-bottom:10px; }
+  .star-row .star{ background:none; border:none; font-size:26px; line-height:1; color:var(--line); cursor:pointer; padding:0; }
+  .star-row .star.active{ color:var(--yellow-dark); }
+  .rate-card textarea{ width:100%; border:1.5px solid var(--line); border-radius:8px; padding:9px 11px; font-family:'Inter',sans-serif; font-size:12.5px; resize:vertical; margin-bottom:10px; }
+  .rate-actions{ display:flex; justify-content:space-between; align-items:center; gap:10px; }
+  .rate-actions .later-link{ background:none; border:none; color:var(--slate); font-size:12px; font-weight:600; cursor:pointer; padding:0; }
+  .rate-actions .submit-rating-btn{ background:var(--ink); color:#fff; border:none; border-radius:8px; padding:8px 16px; font-size:12.5px; font-weight:700; cursor:pointer; }
+  .rate-actions .submit-rating-btn:disabled{ opacity:.4; cursor:not-allowed; }
+  .rated-badge{ font-size:12.5px; font-weight:600; margin-top:10px; }
+  .rated-badge .stars{ color:var(--yellow-dark); letter-spacing:1px; }
+  .rated-badge .comment{ font-weight:400; color:var(--slate); font-size:12px; margin-top:3px; }
+  .rate-later-link{ background:none; border:none; color:var(--yellow-dark); font-size:12px; font-weight:700; cursor:pointer; padding:0; margin-top:8px; display:inline-block; }
+
   .search-bar{ display:flex; align-items:center; gap:10px; background:var(--white); border:1.5px solid var(--line); border-radius:100px; padding:12px 16px; margin:0 20px 14px 20px; }
   .search-bar input{ border:none; outline:none; flex:1; font-family:'Inter',sans-serif; font-size:14px; background:transparent; }
 
@@ -1020,7 +1042,9 @@ const state = {
   sentRequests: [],
   myRequests: [],
   listings: [],
-  navStack: []
+  navStack: [],
+  dismissedRatingPrompts: new Set(),
+  pendingRatings: {}
 };
 
 /* ===================== GEO ===================== */
@@ -1228,7 +1252,10 @@ function mapDelivery(rel){
     currentLat: d.current_latitude,
     currentLng: d.current_longitude,
     locationUpdatedAt: d.location_updated_at,
-    pickupConfirmedByFarmer: d.pickup_confirmed_by_farmer
+    pickupConfirmedByFarmer: d.pickup_confirmed_by_farmer,
+    dropoffConfirmedByBuyer: d.dropoff_confirmed_by_buyer,
+    deliveryRating: d.delivery_rating,
+    deliveryRatingComment: d.delivery_rating_comment
   };
 }
 
@@ -1384,6 +1411,7 @@ function deliveryStatusHtml(d){
     ${d.deliveryFee != null ? `<div class="delivery-fee">Delivery fee: TZS ${Number(d.deliveryFee).toLocaleString()}</div>` : ''}
     ${liveLocationHtml(d)}
     ${pickupConfirmBadgeHtml(d)}
+    ${dropoffConfirmHtml(d)}
   </div>`;
 }
 
@@ -1394,6 +1422,92 @@ function pickupConfirmBadgeHtml(d){
   return d.pickupConfirmedByFarmer
     ? `<div class="pickup-confirm-badge ok">✓ Farmer confirmed pickup</div>`
     : `<div class="pickup-confirm-badge flagged">⚠ Farmer flagged this pickup</div>`;
+}
+
+// Soft, non-blocking drop-off confirmation + a Bolt/Uber-style star rating.
+// Neither answer holds up anything server-side — it's a trust record and,
+// once confirmed, an optional rating of the transporter.
+function dropoffConfirmHtml(d){
+  if(d.status !== 'Delivered') return '';
+
+  if(d.dropoffConfirmedByBuyer == null){
+    return `<div class="dropoff-confirm">
+      <div class="q">Did you receive this delivery?</div>
+      <div class="dropoff-confirm-btns">
+        <button class="yes" onclick="answerDropoff('${d.id}', true)">Yes, received</button>
+        <button class="no" onclick="answerDropoff('${d.id}', false)">No</button>
+      </div>
+    </div>`;
+  }
+
+  if(d.dropoffConfirmedByBuyer === false){
+    return `<div class="pickup-confirm-badge flagged">⚠ You flagged this delivery — we'll follow up</div>`;
+  }
+
+  if(d.deliveryRating != null){
+    return `<div class="rated-badge">
+      ✓ Delivered <span class="stars">${'★'.repeat(d.deliveryRating)}${'☆'.repeat(5 - d.deliveryRating)}</span>
+      ${d.deliveryRatingComment ? `<div class="comment">"${esc(d.deliveryRatingComment)}"</div>` : ''}
+    </div>`;
+  }
+
+  if(state.dismissedRatingPrompts.has(d.id)){
+    return `<div class="pickup-confirm-badge ok">✓ Delivery confirmed</div>
+      <button class="rate-later-link" onclick="state.dismissedRatingPrompts.delete('${d.id}'); refreshAfterRealtime();">Rate this delivery</button>`;
+  }
+
+  return `<div class="rate-card" data-rate-id="${d.id}">
+    <div class="q">Rate your delivery experience</div>
+    <div class="star-row" id="stars-${d.id}">
+      ${[1,2,3,4,5].map(n => `<button type="button" class="star" data-star="${n}" onclick="setStarRating('${d.id}', ${n})">★</button>`).join('')}
+    </div>
+    <textarea id="ratingComment-${d.id}" rows="2" placeholder="Anything you'd like to add? (optional)"></textarea>
+    <div class="rate-actions">
+      <button class="later-link" onclick="dismissRatingPrompt('${d.id}')">Maybe later</button>
+      <button class="submit-rating-btn" id="submitRating-${d.id}" onclick="submitDeliveryRating('${d.id}')" disabled>Submit rating</button>
+    </div>
+  </div>`;
+}
+
+async function answerDropoff(deliveryId, confirmed){
+  const { error } = await sb.from('deliveries').update({
+    dropoff_confirmed_by_buyer: confirmed,
+    dropoff_confirmed_at: new Date().toISOString()
+  }).eq('id', deliveryId);
+  if(error){ showToast('Could not save your answer: ' + error.message); return; }
+  showToast(confirmed ? 'Thanks for confirming!' : 'Thanks — we\'ll look into it');
+  await loadSentRequests(); await loadMyRequests();
+  refreshAfterRealtime();
+}
+
+function setStarRating(deliveryId, n){
+  state.pendingRatings[deliveryId] = n;
+  document.querySelectorAll(`#stars-${deliveryId} .star`).forEach((el, idx) => {
+    el.classList.toggle('active', idx < n);
+  });
+  const btn = document.getElementById(`submitRating-${deliveryId}`);
+  if(btn) btn.disabled = false;
+}
+
+function dismissRatingPrompt(deliveryId){
+  state.dismissedRatingPrompts.add(deliveryId);
+  refreshAfterRealtime();
+}
+
+async function submitDeliveryRating(deliveryId){
+  const rating = state.pendingRatings[deliveryId];
+  if(!rating) return;
+  const commentEl = document.getElementById(`ratingComment-${deliveryId}`);
+  const comment = commentEl ? commentEl.value.trim() : '';
+  const { error } = await sb.from('deliveries').update({
+    delivery_rating: rating,
+    delivery_rating_comment: comment || null
+  }).eq('id', deliveryId);
+  if(error){ showToast('Could not save your rating: ' + error.message); return; }
+  delete state.pendingRatings[deliveryId];
+  showToast('Thanks for rating your delivery!');
+  await loadSentRequests(); await loadMyRequests();
+  refreshAfterRealtime();
 }
 
 function liveLocationHtml(d){

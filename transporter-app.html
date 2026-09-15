@@ -636,6 +636,7 @@
         </div>
         <div id="jdStatusStepper" style="margin-bottom:18px;"></div>
         <div id="jdPickupConfirmBadge" class="pickup-confirm-badge" style="display:none; margin-bottom:14px;"></div>
+        <div id="jdDropoffConfirmBadge" class="pickup-confirm-badge" style="display:none; margin-bottom:14px;"></div>
         <div class="location-share-card" id="jdLocationShareCard" style="display:none;">
           <div>
             <div class="ls-title">Share live location</div>
@@ -671,6 +672,7 @@
         <div class="info-row"><span class="lbl">Vehicle</span><span class="val" id="profileVehicle"></span></div>
         <div class="info-row"><span class="lbl">Capacity</span><span class="val" id="profileCapacity"></span></div>
         <div class="info-row"><span class="lbl">Total earned</span><span class="val" id="profileEarnings"></span></div>
+        <div class="info-row"><span class="lbl">Rating</span><span class="val" id="profileRating">—</span></div>
       </div>
       <div class="card" style="padding:4px 16px; margin-bottom:16px;">
         <div class="info-row">
@@ -985,7 +987,10 @@ function mapJob(row){
     farmer: row.farmers ? { name: row.farmers.name, phone: row.farmers.phone, location: `${row.farmers.village || ''}, ${row.farmers.region || ''}`, lat: row.farmers.latitude, lng: row.farmers.longitude } : null,
     currentLat: row.current_latitude,
     currentLng: row.current_longitude,
-    pickupConfirmedByFarmer: row.pickup_confirmed_by_farmer
+    pickupConfirmedByFarmer: row.pickup_confirmed_by_farmer,
+    dropoffConfirmedByBuyer: row.dropoff_confirmed_by_buyer,
+    rating: row.delivery_rating,
+    ratingComment: row.delivery_rating_comment
   };
 }
 
@@ -1141,6 +1146,26 @@ function openJobDetail(id, from){
       } else {
         badge.className = 'pickup-confirm-badge flagged';
         badge.textContent = '⚠ Farmer flagged this pickup';
+      }
+    }
+
+    const dropoffBadge = document.getElementById('jdDropoffConfirmBadge');
+    if(j.status !== 'Delivered'){
+      dropoffBadge.style.display = 'none';
+    } else {
+      dropoffBadge.style.display = 'flex';
+      if(j.dropoffConfirmedByBuyer == null){
+        dropoffBadge.className = 'pickup-confirm-badge pending';
+        dropoffBadge.textContent = '⏳ Waiting on buyer to confirm delivery';
+      } else if(j.dropoffConfirmedByBuyer === false){
+        dropoffBadge.className = 'pickup-confirm-badge flagged';
+        dropoffBadge.textContent = '⚠ Buyer flagged this delivery';
+      } else if(j.rating != null){
+        dropoffBadge.className = 'pickup-confirm-badge ok';
+        dropoffBadge.textContent = `✓ Delivered — rated ${'★'.repeat(j.rating)}${'☆'.repeat(5 - j.rating)}`;
+      } else {
+        dropoffBadge.className = 'pickup-confirm-badge ok';
+        dropoffBadge.textContent = '✓ Buyer confirmed delivery';
       }
     }
   }
@@ -1300,6 +1325,10 @@ function renderProfile(){
   document.getElementById('profileCapacity').textContent = t.vehicleCapacity ? `${t.vehicleCapacity} ${t.capacityUnit || 'kg'}` : '—';
   const totalEarned = state.myJobs.filter(j => j.status === 'Delivered').reduce((sum, j) => sum + (Number(j.payout) || 0), 0);
   document.getElementById('profileEarnings').textContent = `TZS ${totalEarned.toLocaleString()}`;
+  const ratings = state.myJobs.map(j => j.rating).filter(r => r != null);
+  document.getElementById('profileRating').textContent = ratings.length
+    ? `★ ${(ratings.reduce((a, b) => a + b, 0) / ratings.length).toFixed(1)} (${ratings.length})`
+    : 'No ratings yet';
   refreshPushNotifStatus();
 }
 
