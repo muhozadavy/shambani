@@ -417,6 +417,9 @@
   .delivery-status-card.cancelled .delivery-status-title{ color:var(--slate); }
   .delivery-transporter{ font-size:13px; font-weight:600; margin-top:10px; }
   .delivery-fee{ font-size:12.5px; color:var(--slate); margin-top:4px; }
+  .pickup-confirm-badge{ font-size:12px; font-weight:600; margin-top:10px; display:flex; align-items:center; gap:5px; }
+  .pickup-confirm-badge.ok{ color:var(--green); }
+  .pickup-confirm-badge.flagged{ color:var(--red); }
 
   .search-bar{ display:flex; align-items:center; gap:10px; background:var(--white); border:1.5px solid var(--line); border-radius:100px; padding:12px 16px; margin:0 20px 14px 20px; }
   .search-bar input{ border:none; outline:none; flex:1; font-family:'Inter',sans-serif; font-size:14px; background:transparent; }
@@ -1224,7 +1227,8 @@ function mapDelivery(rel){
     platformCommission: d.platform_commission,
     currentLat: d.current_latitude,
     currentLng: d.current_longitude,
-    locationUpdatedAt: d.location_updated_at
+    locationUpdatedAt: d.location_updated_at,
+    pickupConfirmedByFarmer: d.pickup_confirmed_by_farmer
   };
 }
 
@@ -1379,7 +1383,17 @@ function deliveryStatusHtml(d){
     ${d.transporterName ? `<div class="delivery-transporter">${d.transporterName}${d.vehicleType ? ' · ' + d.vehicleType : ''}${d.transporterPhone ? ' · ' + d.transporterPhone : ''}</div>` : ''}
     ${d.deliveryFee != null ? `<div class="delivery-fee">Delivery fee: TZS ${Number(d.deliveryFee).toLocaleString()}</div>` : ''}
     ${liveLocationHtml(d)}
+    ${pickupConfirmBadgeHtml(d)}
   </div>`;
+}
+
+// Read-only for the buyer — the farmer is the one asked to confirm pickup,
+// this is just a trust signal once they've answered.
+function pickupConfirmBadgeHtml(d){
+  if(d.pickupConfirmedByFarmer == null) return '';
+  return d.pickupConfirmedByFarmer
+    ? `<div class="pickup-confirm-badge ok">✓ Farmer confirmed pickup</div>`
+    : `<div class="pickup-confirm-badge flagged">⚠ Farmer flagged this pickup</div>`;
 }
 
 function liveLocationHtml(d){

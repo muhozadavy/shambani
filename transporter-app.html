@@ -388,6 +388,10 @@
   .leaflet-pin-pickup{ background:var(--green, #2E7D46); width:14px; height:14px; border-radius:50%; border:2px solid #fff; }
   .leaflet-pin-dropoff{ background:var(--ink); width:14px; height:14px; border-radius:50%; border:2px solid #fff; }
   .leaflet-pin-truck{ font-size:20px; line-height:26px; text-align:center; filter:drop-shadow(0 1px 2px rgba(0,0,0,.35)); }
+  .pickup-confirm-badge{ font-size:12.5px; font-weight:600; display:flex; align-items:center; gap:5px; }
+  .pickup-confirm-badge.ok{ color:var(--green); }
+  .pickup-confirm-badge.flagged{ color:var(--red); }
+  .pickup-confirm-badge.pending{ color:var(--slate); }
 
   /* ---------- Live location sharing ---------- */
   .location-share-card{ background:var(--white); border:1px solid var(--line); border-radius:var(--radius-sm); padding:14px; margin-bottom:16px; display:flex; align-items:center; justify-content:space-between; gap:12px; }
@@ -631,6 +635,7 @@
           <div class="detail-stat"><div class="lbl">Your payout</div><div class="val" id="jdPayout"></div></div>
         </div>
         <div id="jdStatusStepper" style="margin-bottom:18px;"></div>
+        <div id="jdPickupConfirmBadge" class="pickup-confirm-badge" style="display:none; margin-bottom:14px;"></div>
         <div class="location-share-card" id="jdLocationShareCard" style="display:none;">
           <div>
             <div class="ls-title">Share live location</div>
@@ -979,7 +984,8 @@ function mapJob(row){
     buyer: row.buyers ? { name: row.buyers.business_name || row.buyers.name, phone: row.buyers.phone, location: `${row.buyers.district || ''}, ${row.buyers.region || ''}`, lat: row.buyers.latitude, lng: row.buyers.longitude } : null,
     farmer: row.farmers ? { name: row.farmers.name, phone: row.farmers.phone, location: `${row.farmers.village || ''}, ${row.farmers.region || ''}`, lat: row.farmers.latitude, lng: row.farmers.longitude } : null,
     currentLat: row.current_latitude,
-    currentLng: row.current_longitude
+    currentLng: row.current_longitude,
+    pickupConfirmedByFarmer: row.pickup_confirmed_by_farmer
   };
 }
 
@@ -1119,6 +1125,24 @@ function openJobDetail(id, from){
     const onTheRoad = j.status === 'PickedUp' || j.status === 'InTransit';
     shareCard.style.display = onTheRoad ? 'flex' : 'none';
     if(onTheRoad) shareToggle.checked = state.locationSharingJobId === j.id;
+
+    const pastPickup = j.status === 'PickedUp' || j.status === 'InTransit' || j.status === 'Delivered';
+    const badge = document.getElementById('jdPickupConfirmBadge');
+    if(!pastPickup){
+      badge.style.display = 'none';
+    } else {
+      badge.style.display = 'flex';
+      if(j.pickupConfirmedByFarmer == null){
+        badge.className = 'pickup-confirm-badge pending';
+        badge.textContent = '⏳ Waiting on farmer to confirm pickup';
+      } else if(j.pickupConfirmedByFarmer){
+        badge.className = 'pickup-confirm-badge ok';
+        badge.textContent = '✓ Farmer confirmed pickup';
+      } else {
+        badge.className = 'pickup-confirm-badge flagged';
+        badge.textContent = '⚠ Farmer flagged this pickup';
+      }
+    }
   }
 
   renderJobDetailMap(j);

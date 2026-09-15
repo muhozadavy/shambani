@@ -293,6 +293,15 @@
   .delivery-status-card.cancelled .delivery-status-title{ color:var(--slate); }
   .delivery-transporter{ font-size:13px; font-weight:600; margin-top:10px; }
   .delivery-fee{ font-size:12.5px; color:var(--slate); margin-top:4px; }
+  .pickup-confirm{ background:#FFF8EA; border:1px solid #F0DCA8; border-radius:var(--radius-sm); padding:11px 13px; margin-top:12px; }
+  .pickup-confirm .q{ font-size:12.5px; font-weight:600; margin-bottom:9px; }
+  .pickup-confirm-btns{ display:flex; gap:8px; }
+  .pickup-confirm-btns button{ flex:1; padding:8px; border-radius:8px; border:1.5px solid var(--line); background:var(--white); font-size:12.5px; font-weight:700; cursor:pointer; }
+  .pickup-confirm-btns button.yes{ border-color:var(--green); color:var(--green); }
+  .pickup-confirm-btns button.no{ border-color:var(--red); color:var(--red); }
+  .pickup-confirm-badge{ font-size:12px; font-weight:600; margin-top:10px; display:flex; align-items:center; gap:5px; }
+  .pickup-confirm-badge.ok{ color:var(--green); }
+  .pickup-confirm-badge.flagged{ color:var(--red); }
 
   .icon{ width:20px; height:20px; display:inline-block; flex-shrink:0; }
 
@@ -1420,7 +1429,40 @@ function deliveryStatusHtml(d){
     ${d.transporterName ? `<div class="delivery-transporter">${d.transporterName}${d.vehicleType ? ' · ' + d.vehicleType : ''}${d.transporterPhone ? ' · ' + d.transporterPhone : ''}</div>` : ''}
     ${d.deliveryFee != null ? `<div class="delivery-fee">Delivery fee: TZS ${Number(d.deliveryFee).toLocaleString()}</div>` : ''}
     ${liveLocationHtml(d)}
+    ${pickupConfirmHtml(d)}
   </div>`;
+}
+
+// A lightweight, non-blocking check: once the transporter marks a job
+// picked up, ask the farmer to confirm it actually happened. Doesn't gate
+// the transporter's progress — it's just a trust/dispute record, shown as
+// a Yes/No prompt until answered, then a small badge.
+function pickupConfirmHtml(d){
+  const pastPickup = d.status === 'PickedUp' || d.status === 'InTransit' || d.status === 'Delivered';
+  if(!pastPickup) return '';
+  if(d.pickupConfirmedByFarmer == null){
+    return `<div class="pickup-confirm">
+      <div class="q">Did the transporter collect this?</div>
+      <div class="pickup-confirm-btns">
+        <button class="yes" onclick="confirmPickup('${d.id}', true)">Yes, collected</button>
+        <button class="no" onclick="confirmPickup('${d.id}', false)">No</button>
+      </div>
+    </div>`;
+  }
+  return d.pickupConfirmedByFarmer
+    ? `<div class="pickup-confirm-badge ok">✓ You confirmed pickup</div>`
+    : `<div class="pickup-confirm-badge flagged">⚠ You flagged this pickup — we'll follow up</div>`;
+}
+
+async function confirmPickup(deliveryId, confirmed){
+  const { error } = await sb.from('deliveries').update({
+    pickup_confirmed_by_farmer: confirmed,
+    pickup_confirmed_at: new Date().toISOString()
+  }).eq('id', deliveryId);
+  if(error){ showToast('Could not save your answer: ' + error.message); return; }
+  showToast(confirmed ? 'Thanks for confirming!' : 'Thanks — we\'ll look into it');
+  await loadListings(); await loadBuyingRequests();
+  refreshAfterRealtime();
 }
 
 function liveLocationHtml(d){
@@ -1835,7 +1877,8 @@ function mapDelivery(rel){
     platformCommission: d.platform_commission,
     currentLat: d.current_latitude,
     currentLng: d.current_longitude,
-    locationUpdatedAt: d.location_updated_at
+    locationUpdatedAt: d.location_updated_at,
+    pickupConfirmedByFarmer: d.pickup_confirmed_by_farmer
   };
 }
 
